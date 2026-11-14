@@ -1,7 +1,7 @@
 import { createMetadataSearchEntry } from './catalog.js';
 
 export const LIBRARY_DATABASE = 'addons:state:chord-catalog:v1';
-const LIBRARY_DATABASE_VERSION = 3;
+const LIBRARY_DATABASE_VERSION = 5;
 
 function selectedGenre(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -56,9 +56,13 @@ function migrateCharts(store) {
 
 /** Replaces complete legacy source metadata with the fields still used by the app. */
 function migrateUnusedScraperMetadata(transaction, oldVersion) {
-  if (oldVersion >= LIBRARY_DATABASE_VERSION) return;
+  if (oldVersion >= 3) return;
   migrateCharts(transaction.objectStore('sources'));
   migrateCharts(transaction.objectStore('chunks'));
+}
+
+function chartLocations(root, index, charts) {
+  return { root, index, ids: charts.map(chart => chart.id).filter(id => typeof id === 'string') };
 }
 
 /** One transaction replaces a source; small records avoid Chromium's per-value limit. */
@@ -79,6 +83,42 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
         if (!chunks.indexNames.contains('root')) chunks.createIndex('root', 'root');
       }
       migrateUnusedScraperMetadata(transaction, event.oldVersion);
+      if (!db.objectStoreNames.contains('search')) {
+        const search = db.createObjectStore('search', { keyPath: ['root', 'index'] });
+        search.createIndex('root', 'root');
+        for (const name of ['sources', 'chunks']) {
+          const cursorRequest = transaction.objectStore(name).openCursor();
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (!cursor) return;
+            const record = cursor.value;
+            if (Array.isArray(record.charts)) {
+              search.put({
+                root: record.root, index: name === 'sources' ? -1 : record.index,
+                entries: record.charts.map(createMetadataSearchEntry),
+              });
+            }
+            cursor.continue();
+          };
+        }
+      }
+      if (!db.objectStoreNames.contains('locations')) {
+        const locations = db.createObjectStore('locations', { keyPath: ['root', 'index'] });
+        locations.createIndex('ids', 'ids', { multiEntry: true });
+        locations.createIndex('root', 'root');
+        for (const name of ['sources', 'chunks']) {
+          const cursorRequest = transaction.objectStore(name).openCursor();
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (!cursor) return;
+            const record = cursor.value;
+            if (Array.isArray(record.charts)) {
+              locations.put(chartLocations(record.root, name === 'sources' ? -1 : record.index, record.charts));
+            }
+            cursor.continue();
+          };
+        }
+      }
     };
     request.onsuccess = () => {
       request.result.onversionchange = () => { request.result.close(); database = undefined; };
@@ -91,12 +131,12 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
   async function execute(mode, operation) {
     const db = await open();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(['sources', 'chunks'], mode);
+      const transaction = db.transaction(['sources', 'chunks', 'search', 'locations'], mode);
       let result;
       transaction.oncomplete = () => { try { resolve(result?.()); } catch (error) { reject(error); } };
       transaction.onerror = () => reject(transaction.error ?? new Error('Library transaction failed.'));
       transaction.onabort = () => reject(transaction.error ?? new Error('Library write aborted.'));
-      try { result = operation(transaction.objectStore('sources'), transaction.objectStore('chunks')); }
+      try { result = operation(transaction.objectStore('sources'), transaction.objectStore('chunks'), transaction.objectStore('search'), transaction.objectStore('locations')); }
       catch (error) { transaction.abort(); reject(error); }
     });
   }
@@ -112,7 +152,17 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
       size += bytes;
     }
     if (charts.length) parts.push(charts);
-    return execute('readwrite', (sources, chunks) => {
+    return execute('readwrite', (sources, chunks, search, locations) => {
+      const oldLocations = locations.index('root').openKeyCursor(root);
+      oldLocations.onsuccess = () => {
+        if (oldLocations.result) { locations.delete(oldLocations.result.primaryKey); oldLocations.result.continue(); return; }
+        parts.forEach((charts, index) => locations.put(chartLocations(root, index, charts)));
+      };
+      const cached = search.index('root').openKeyCursor(root);
+      cached.onsuccess = () => {
+        if (cached.result) { search.delete(cached.result.primaryKey); cached.result.continue(); return; }
+        parts.forEach((charts, index) => search.put({ root, index, entries: charts.map(createMetadataSearchEntry) }));
+      };
       const cursor = chunks.index('root').openKeyCursor(root);
       cursor.onsuccess = () => {
         if (cursor.result) { chunks.delete(cursor.result.primaryKey); cursor.result.continue(); return; }
@@ -126,22 +176,13 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
   }
 
   function searchEntries() {
-    return execute('readonly', (sources, chunks) => {
+    return execute('readonly', (_sources, _chunks, search) => {
       const entries = [];
-      const chunkCursor = chunks.openCursor();
-      chunkCursor.onsuccess = () => {
-        const cursor = chunkCursor.result;
+      const request = search.openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
         if (!cursor) return;
-        for (const chart of cursor.value.charts ?? []) entries.push(createMetadataSearchEntry(chart));
-        cursor.continue();
-      };
-      const sourceCursor = sources.openCursor();
-      sourceCursor.onsuccess = () => {
-        const cursor = sourceCursor.result;
-        if (!cursor) return;
-        if (cursor.value.chunkCount === undefined && Array.isArray(cursor.value.charts)) {
-          for (const chart of cursor.value.charts) entries.push(createMetadataSearchEntry(chart));
-        }
+        entries.push(...cursor.value.entries);
         cursor.continue();
       };
       return () => entries;
@@ -152,26 +193,34 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
     const orderedIds = [...new Set(ids)];
     if (orderedIds.length === 0) return Promise.resolve([]);
     const wanted = new Set(orderedIds);
-    return execute('readonly', (sources, chunks) => {
-      const found = new Map();
-      const collect = (charts) => {
-        for (const chart of charts ?? []) if (wanted.has(chart.id)) found.set(chart.id, chart);
+    return execute('readonly', (sources, chunks, _search, locations) => {
+      const blocks = new Map();
+      for (const id of orderedIds) {
+        const lookup = locations.index('ids').getAll(id);
+        lookup.onsuccess = () => {
+          for (const location of lookup.result) {
+            const key = JSON.stringify([location.root, location.index]);
+            if (blocks.has(key)) continue;
+            blocks.set(key, { ...location, charts: [] });
+            const request = location.index === -1
+              ? sources.get(location.root)
+              : chunks.get([location.root, location.index]);
+            request.onsuccess = () => { blocks.get(key).charts = request.result?.charts ?? []; };
+          }
+        };
+      }
+      return () => {
+        const found = new Map();
+        // Preserve the previous precedence: ordered blocks, then legacy sources.
+        const ordered = [...blocks.values()].sort((a, b) =>
+          Number(a.index === -1) - Number(b.index === -1)
+          || (a.root < b.root ? -1 : a.root > b.root ? 1 : 0)
+          || a.index - b.index);
+        for (const block of ordered) {
+          for (const chart of block.charts) if (wanted.has(chart.id)) found.set(chart.id, chart);
+        }
+        return orderedIds.flatMap(id => found.has(id) ? [found.get(id)] : []);
       };
-      const chunkCursor = chunks.openCursor();
-      chunkCursor.onsuccess = () => {
-        const cursor = chunkCursor.result;
-        if (!cursor) return;
-        collect(cursor.value.charts);
-        cursor.continue();
-      };
-      const sourceCursor = sources.openCursor();
-      sourceCursor.onsuccess = () => {
-        const cursor = sourceCursor.result;
-        if (!cursor) return;
-        if (cursor.value.chunkCount === undefined) collect(cursor.value.charts);
-        cursor.continue();
-      };
-      return () => orderedIds.flatMap((id) => found.has(id) ? [found.get(id)] : []);
     });
   }
 
@@ -236,6 +285,6 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
     getChartsByIds,
     put: (snapshot) => replace(snapshot.root, snapshot),
     remove: (root) => replace(root),
-    clear: () => execute('readwrite', (sources, chunks) => { sources.clear(); chunks.clear(); }),
+    clear: () => execute('readwrite', (sources, chunks, search, locations) => { sources.clear(); chunks.clear(); search.clear(); locations.clear(); }),
   };
 }

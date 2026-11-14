@@ -114,6 +114,10 @@ export function createMetadataSearchEntry(chart) {
     title: chart.title ?? '',
     artist: chart.artist?.name ?? '',
     genre,
+    chart: {
+      id: chart.id, title: chart.title, artist: chart.artist, album: chart.album,
+      key: chart.key, capo: chart.capo, tempo: chart.tempo,
+    },
   };
 }
 

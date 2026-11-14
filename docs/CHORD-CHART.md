@@ -549,13 +549,22 @@ the catalogue settings; a deployed portal can use another base path.
 ### Cache de navegação do catálogo
 
 Nas listagens de catálogo, o navegador reutiliza uma fotografia em memória dos
-dados persistidos. A busca offline usa outro caminho: percorre os blocos do
-IndexedDB e mantém no índice apenas o ID, o título, o nome do artista e o gênero.
-Ela corresponde a esses três campos e guarda resultados como referências a esse
-índice, sem copiar letras, acordes ou o JSON original para o cache de busca. Para
-montar uma página de resultados, o add-on percorre os blocos do IndexedDB e mantém
-na resposta somente as cifras daquela página; ao abrir uma música, mantém somente
-o registro escolhido. Atualizar ou excluir uma fonte invalida os caches.
+dados persistidos. Para evitar reler todas as letras a cada página de resultados,
+a busca offline usa um cache persistente separado no IndexedDB. Ele guarda ID,
+título, artista e gênero para buscar, além dos campos necessários para montar a
+linha: artista e imagem, álbum e ano, tom, capotraste e andamento. Letras, acordes
+e metadados brutos não entram nesse cache.
+
+O cache é criado automaticamente para bibliotecas antigas na primeira abertura.
+Novas importações, substituições, exclusões e limpeza atualizam os registros de
+busca na mesma transação das cifras. Assim, uma falha preserva também o cache
+anterior. Atualizar ou excluir uma fonte invalida os resultados em memória.
+As páginas de busca são montadas diretamente com os metadados. Para abrir uma
+música, um índice persistente liga o ID da cifra ao bloco que contém seu texto.
+A leitura busca apenas os blocos necessários, sem percorrer o acervo inteiro.
+O índice é criado automaticamente para acervos existentes e atualizado na mesma
+transação de importação, substituição, exclusão ou limpeza das fontes. Os textos
+continuam no armazenamento original, sem duplicação no índice.
 
 O host prepara até duas páginas seguintes após exibir a página atual. Um cache
 limitado a doze páginas de exibição compartilha também as promessas em andamento,
@@ -564,8 +573,9 @@ a configuração dos provedores. Falhas no pré-carregamento não interrompem a 
 aberta. Esses caches duram apenas enquanto o módulo ou a configuração atual estão
 ativos; o IndexedDB continua sendo a fonte persistente do catálogo.
 
-A preparação do índice percorre os blocos do IndexedDB com cursores; cada bloco é
-descartado depois de extrair os campos de busca. O servidor HTTP mantém a busca mais
+A preparação do índice lê os blocos reduzidos do cache persistente com cursores,
+sem carregar os blocos de letras. O índice e os resultados calculados são
+reutilizados em memória durante a sessão. O servidor HTTP mantém a busca mais
 ampla, que também pode corresponder a compositores, tons, acordes, tags e palavras
 da letra.
 

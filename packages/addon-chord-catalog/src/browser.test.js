@@ -3,6 +3,7 @@ import { validateTabContract } from '@addons-poc/protocol';
 import { createTab, request, setup } from './browser.js';
 import { CHARTS } from './data/charts.js';
 import { manifest } from './manifest.js';
+import { createMetadataSearchEntry } from './catalog.js';
 
 describe('chord catalogue browser tab', () => {
   it('matches the public runtime field and action contract', () => {
@@ -34,9 +35,7 @@ describe('browser catalogue navigation cache', () => {
       { ...CHARTS[0], id: 'imported-cache-test', title: 'Unique cached chart', checksum: 'test' },
     ] }];
     stored.list.mockReset().mockImplementation(async () => stored.sources);
-    stored.searchEntries.mockReset().mockImplementation(async () => stored.sources.flatMap((source) => source.charts.map((chart) => ({
-      id: chart.id, title: chart.title, artist: chart.artist.name, genre: chart.genre?.name ?? chart.tags?.join(' ') ?? '',
-    }))));
+    stored.searchEntries.mockReset().mockImplementation(async () => stored.sources.flatMap((source) => source.charts.map(createMetadataSearchEntry)));
     stored.getChartsByIds.mockReset().mockImplementation(async (ids) => stored.sources.flatMap((source) => source.charts.filter((chart) => ids.includes(chart.id))));
     stored.remove.mockReset().mockImplementation(async () => { stored.sources = []; });
     vi.stubGlobal('location', { origin: 'http://localhost:5280' });
@@ -48,6 +47,7 @@ describe('browser catalogue navigation cache', () => {
     expect(first.metas.map((chart) => chart.id)).toEqual(['imported-cache-test']);
     expect(JSON.parse((await search(1)).body).metas).toEqual([]);
     expect(stored.searchEntries).toHaveBeenCalledTimes(1);
+    expect(stored.getChartsByIds).not.toHaveBeenCalled();
     await createTab().run('delete', { deleteSource: 'https://example.test/charts/' });
     expect(JSON.parse((await search(0)).body).metas).toEqual([]);
     expect(stored.searchEntries).toHaveBeenCalledTimes(2);

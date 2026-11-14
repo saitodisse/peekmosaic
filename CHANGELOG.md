@@ -4,6 +4,14 @@ This file describes, in reverse order, how the project evolved. The quick read s
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.19.3] - 2026-11-13
+
+### Fixed
+
+- Speed up artist result pages with persistent search and display metadata, avoiding repeated reads of complete chart blocks.
+- Open imported charts through a persistent ID-to-block index instead of scanning the whole local library.
+- Migrate existing libraries automatically and update both indexes atomically when importing, replacing, deleting, or clearing sources.
+
 ## [1.19.2] - 2026-11-03
 
 ### Fixed

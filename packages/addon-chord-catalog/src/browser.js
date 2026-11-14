@@ -104,15 +104,7 @@ export async function request({ url }) {
       cursor: parsed.searchParams.get('cursor') ?? undefined,
     });
     if (resource === 'search') {
-      const wantedIds = new Set(items.map((entry) => entry.id));
-      const pageCharts = new Map(demoCharts
-        .filter((chart) => wantedIds.has(chart.id))
-        .map((chart) => [chart.id, chart]));
-      for (const chart of await library.getChartsByIds([...wantedIds])) pageCharts.set(chart.id, chart);
-      body = JSON.stringify({ metas: items.flatMap((entry) => {
-        const chart = pageCharts.get(entry.id);
-        return chart ? [toMeta(chart, baseUrl)] : [];
-      }), pagination });
+      body = JSON.stringify({ metas: items.map((entry) => toMeta(entry.chart, baseUrl)), pagination });
     } else {
       body = JSON.stringify({ metas: items.map((chart) => toMeta(chart, baseUrl)), pagination });
     }
