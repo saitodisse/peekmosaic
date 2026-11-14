@@ -52,7 +52,7 @@ import { manifest } from './manifest.js';
 
 const server = await createAddonServer({
   manifest,
-  port: 5294,
+  port: 5295,
   handlers: { catalog, search, text, content },
 });
 
@@ -68,7 +68,7 @@ JavaScript and has no external runtime dependencies beyond the public protocol.
 
 ```bash
 pnpm --filter @addons/addon-server test
-pnpm --filter @addons/addon-text-wikipedia serve
+pnpm --filter @addons/addon-chord-catalog serve
 ```
 
 The remaining consumer is documented in the [package index](../../docs/PACKAGES.md). The host knows only the manifest URL; it does not import this server or the handlers of a specific add-on.

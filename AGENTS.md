@@ -70,11 +70,11 @@ Any change to `protocol` requires reviewing `docs/ARCHITECTURE.md`, `docs/DECISI
 |---|---|
 | `pnpm install` | Install dependencies |
 | `pnpm test` | Run all tests |
-| `pnpm dev` | Start the host, two HTTP add-ons, and five in-process add-ons |
+| `pnpm dev` | Start the host, the HTTP catalogue, and three in-process add-ons |
 | `pnpm kill-all` | Stop development-mode processes |
-| `pnpm dev:addons` | Start only the HTTP servers |
+| `pnpm dev:addons` | Start only the chord add-on servers |
 | `pnpm --filter @addons/host-app dev` | Start only the host |
-| `pnpm --filter @addons/addon-text-wikipedia serve` | Start only the Wikipedia add-on |
+| `pnpm --filter @addons/addon-chord-catalog serve` | Start only the chord catalogue add-on |
 
 Start with the narrowest check related to the change. Before finishing a protocol change, also run `pnpm test`.
 

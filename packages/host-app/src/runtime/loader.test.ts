@@ -96,7 +96,7 @@ describe('FetchAddonLoader', () => {
 
   it('accepts a bundle manifest with a project-relative entrypoint', async () => {
     const remoteManifest = manifest('markdown', [service('addons.markdown.text-formatter', 'provides', '1.0.0')]);
-    const bundleManifest = { ...remoteManifest, entrypoint: '/packages/addon-markdown/dist/bundle.js' };
+    const bundleManifest = { ...remoteManifest, entrypoint: '/packages/example-addon/dist/bundle.js' };
     setupFetch(remoteManifest);
     const registry = new ServiceRegistry();
     const loader = new FetchAddonLoader(registry, { log() {} }, async () => moduleFor(bundleManifest));

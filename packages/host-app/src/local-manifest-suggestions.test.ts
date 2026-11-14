@@ -14,12 +14,8 @@ describe('suggested local manifests', () => {
 
   it('keeps local URLs even before reading metadata', () => {
     expect(LOCAL_MANIFEST_URLS).toEqual([
-      'http://localhost:5294/manifest.json',
       'http://localhost:5295/manifest.json',
-      'http://localhost:5304/manifest.json',
       'http://localhost:5305/manifest.json',
-      'http://localhost:5306/manifest.json',
-      'http://localhost:5307/manifest.json',
       'http://localhost:5308/manifest.json',
       'http://localhost:5309/manifest.json',
     ]);
@@ -68,7 +64,7 @@ describe('suggested local manifests', () => {
   });
 
   it('builds a local URL from the port', () => {
-    expect(localManifestUrl(5304)).toBe('http://localhost:5304/manifest.json');
+    expect(localManifestUrl(5308)).toBe('http://localhost:5308/manifest.json');
     expect(LOCAL_MANIFEST_URLS).toHaveLength(LOCAL_MANIFEST_PORTS.length);
   });
 
@@ -83,25 +79,25 @@ describe('suggested local manifests', () => {
 
   it('keeps production add-ons ahead of local-only suggestions', () => {
     const suggestions = [
-      { manifestUrl: 'http://localhost:5304/manifest.json', id: 'wikipedia', title: 'Wikipedia', description: '' },
+      { manifestUrl: 'http://localhost:5308/manifest.json', id: 'example', title: 'Example', description: '' },
       { manifestUrl: 'https://www.peekmosaic.com/addons/1.17.2/chord-catalog/manifest.json', id: 'chord-catalog', title: 'Catalogue', description: '' },
       { manifestUrl: 'http://localhost:5309/manifest.json', title: 'Local example', description: '' },
     ];
     expect(prioritizePublishedAddonSuggestions(suggestions).map(({ manifestUrl }) => manifestUrl)).toEqual([
       'https://www.peekmosaic.com/addons/1.17.2/chord-catalog/manifest.json',
-      'http://localhost:5304/manifest.json',
+      'http://localhost:5308/manifest.json',
       'http://localhost:5309/manifest.json',
     ]);
   });
 
   it('uses the title and description published by the manifest without importing the add-on', async () => {
     const suggestions = await loadLocalManifestSuggestions(async (url) => ({
-      ok: url.endsWith(':5294/manifest.json'),
-      json: async () => ({ id: 'wikipedia', name: 'Wikipedia', description: 'Summaries and search', version: '2.3.4' }),
+      ok: url.endsWith(':5295/manifest.json'),
+      json: async () => ({ id: 'chord-catalog', name: 'Chord catalogue', description: 'Charts and search', version: '2.3.4' }),
     }));
 
-    expect(suggestions.find((suggestion) => suggestion.manifestUrl.endsWith(':5294/manifest.json'))).toMatchObject({ id: 'wikipedia', title: 'Wikipedia', description: 'Summaries and search', version: '2.3.4' });
-    const unanswered = suggestions.find((suggestion) => suggestion.manifestUrl.endsWith(':5304/manifest.json'));
-    expect(unanswered).toMatchObject({ title: 'Local manifest (port 5304)', description: 'Local demonstration manifest URL.' });
+    expect(suggestions.find((suggestion) => suggestion.manifestUrl.endsWith(':5295/manifest.json'))).toMatchObject({ id: 'chord-catalog', title: 'Chord catalogue', description: 'Charts and search', version: '2.3.4' });
+    const unanswered = suggestions.find((suggestion) => suggestion.manifestUrl.endsWith(':5308/manifest.json'));
+    expect(unanswered).toMatchObject({ title: 'Local manifest (port 5308)', description: 'Local demonstration manifest URL.' });
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Starts host-app and each add-on as an independent process.
  * Usage: pnpm dev
- * Ports: host-app :5280 · HTTP add-ons :5294, :5295 · in-process add-ons :5304-5309
+ * Ports: host-app :5280 · HTTP add-on :5295 · in-process add-ons :5305, :5308, :5309
  *
  * When a project with a `serve` script is added, removed, or changes its port,
  * update this list and synchronize `PORTS` and the orphan patterns in
@@ -21,12 +21,8 @@ const isWSL = Boolean(
 // shared libraries are excluded because they have no own server.
 // Keep this list synchronized with PORTS/patterns in kill-all.mjs.
 const ADDON_SERVERS = [
-  { packageName: '@addons/addon-text-wikipedia', port: 5294 },
   { packageName: '@addons/addon-chord-catalog', port: 5295 },
-  { packageName: '@addons/addon-markdown', port: 5304 },
   { packageName: '@addons/addon-chord-viewer', port: 5305 },
-  { packageName: '@addons/addon-favorites', port: 5306 },
-  { packageName: '@addons/addon-health', port: 5307 },
   { packageName: '@addons/addon-storage-local', port: 5308 },
   { packageName: '@addons/addon-chord-editor', port: 5309 },
 ];

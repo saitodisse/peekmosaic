@@ -55,16 +55,13 @@ pnpm install
 pnpm dev
 ```
 
-The command starts the host at `http://localhost:5280`, two HTTP servers, and six in-process add-ons. Each one publishes its own manifest and bundle; the host does not serve them.
+The command starts the host at `http://localhost:5280`, one HTTP server, and three in-process add-ons. Each one publishes its own manifest and bundle; the host does not serve them.
 
 | Port | Add-on | Content source |
 |---:|---|---|
-| `5294` | Wikipedia | Wikipedia APIs |
 | `5295` | Chord chart catalogue | The demo chart data set |
 
-The in-process add-ons use ports `5304` through `5309`. For example, `http://localhost:5305/manifest.json` publishes the chord viewer, and `http://localhost:5309/manifest.json` publishes the chord editor. Each in-process add-on can be run separately with `pnpm --filter @addons/<name> serve`.
-
-The **Add-on Health** tab queries the eight remaining manifests in the demonstration, measures each server's latency, and shows its name, address, and state.
+The in-process add-ons use ports `5305`, `5308`, and `5309`. For example, `http://localhost:5305/manifest.json` publishes the chord viewer, and `http://localhost:5309/manifest.json` publishes the chord editor. Each in-process add-on can be run separately with `pnpm --filter @addons/<name> serve`.
 
 In WSL2, open `http://localhost:5280` manually in the Windows browser. The server already listens on `0.0.0.0`, and the script avoids trying to open a browser inside Linux.
 
@@ -79,8 +76,8 @@ pnpm kill-all
 | Command | What it does |
 |---|---|
 | `pnpm dev:host` | Starts only the host |
-| `pnpm dev:addons` | Starts only the HTTP add-ons |
-| `pnpm --filter @addons/addon-markdown serve` | Bundles and serves only the Markdown add-on on `5304` |
+| `pnpm dev:addons` | Starts only the chord add-on servers |
+| `pnpm --filter @addons/addon-chord-viewer serve` | Bundles and serves only the chord viewer on `5305` |
 | `pnpm test` | Runs tests for all packages |
 | `pnpm build:host` | Creates the host production build |
 
@@ -128,12 +125,10 @@ Settings, each search add-on can set its result limit
 between 1 and 500. The host offers **Previous page** and **Next page** when the
 add-on returns a continuation cursor; changing pages replaces the table with
 that page's items. The `q` term and `page` number stay in the URL through
-`nuqs`, allowing searches to be shared and restored. Wikipedia uses pages of up
-to 20 articles (the extracts API limit) and stops at 500 records; each article's
-extract appears directly in the **Description** column. With an active
+`nuqs`, allowing searches to be shared and restored. With an active
 `state-store` provider, the query, page, rows, and cursors are persisted.
 
-The HTTP server started by `pnpm dev` remains available as an independent example at `http://localhost:5294/manifest.json`; the host neither knows it in advance nor includes it in its build.
+The HTTP server started by `pnpm dev` remains available as an independent example at `http://localhost:5295/manifest.json`; the host neither knows it in advance nor includes it in its build.
 
 ### Edit a chart locally
 
@@ -146,11 +141,7 @@ Install the local storage, chord catalogue, chord viewer, and chord editor manif
 | [`@addons-poc/protocol`](packages/protocol/README.md) | Contract v1, JSON Schema, SemVer, service descriptors, validators, and authoring SDK |
 | [`@addons/host-app`](packages/host-app/README.md) | Generic React application that installs and presents add-ons by URL |
 | [`@addons/addon-server`](packages/addon-server/README.md) | HTTP server for text add-ons |
-| [`@addons/addon-markdown`](packages/addon-markdown/README.md) | Namespaced Markdown service |
-| [`@addons/addon-favorites`](packages/addon-favorites/README.md) | Namespaced favorites service |
-| [`@addons/addon-health`](packages/addon-health/README.md) | Remote server health checks |
 | [`@addons/addon-storage-local`](packages/addon-storage-local/README.md) | Optional official `state-store` service using `localStorage` |
-| [`@addons/addon-text-wikipedia`](packages/addon-text-wikipedia/README.md) | HTTP Wikipedia summaries and searches |
 | [`@addons/addon-chord-catalog`](packages/addon-chord-catalog/README.md) | HTTP chord-chart catalogue with listing, search, and chart delivery |
 | [`@addons/addon-chord-viewer`](packages/addon-chord-viewer/README.md) | In-process chord-chart renderer with controls |
 | [`@addons/addon-chord-editor`](packages/addon-chord-editor/README.md) | Monaco chart editor and local drafts |

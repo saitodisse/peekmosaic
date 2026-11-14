@@ -4,6 +4,10 @@ Building an extensible system all at once would hide too many risks. That is why
 
 The states used here are **Planned**, **In Progress**, **Delivered**, **Partial**, **Deactivated**, and **Replaced**.
 
+## Removal of demonstration add-ons on 2026-11-13
+
+**Delivered:** Wikipedia, Markdown, Favorites, and Add-on Health were removed from the workspace, local manifest suggestions, and development commands. The catalogue, viewer, local storage, and editor remain available. Earlier sections record historical deliveries.
+
 The current state of the packages is detailed in [`PACKAGES.md`](PACKAGES.md). Phases 1 through 6 preserve the POC's history; when an old name appears in them, it is historical and is no longer a public API.
 
 ## Journey map

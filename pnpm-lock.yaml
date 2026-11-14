@@ -88,45 +88,6 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@edge-runtime/vm@3.2.0)(@types/node@20.11.0)(jsdom@26.1.0)(tsx@4.21.0)
 
-  packages/addon-favorites:
-    dependencies:
-      '@addons-poc/protocol':
-        specifier: 1.0.0
-        version: 1.0.0
-    devDependencies:
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.7(@edge-runtime/vm@3.2.0)(@types/node@20.11.0)(jsdom@26.1.0)(tsx@4.21.0)
-
-  packages/addon-health:
-    dependencies:
-      '@addons-poc/protocol':
-        specifier: 1.0.0
-        version: 1.0.0
-    devDependencies:
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.7(@edge-runtime/vm@3.2.0)(@types/node@20.11.0)(jsdom@26.1.0)(tsx@4.21.0)
-
-  packages/addon-markdown:
-    dependencies:
-      '@addons-poc/protocol':
-        specifier: 1.0.0
-        version: 1.0.0
-    devDependencies:
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.7(@edge-runtime/vm@3.2.0)(@types/node@20.11.0)(jsdom@26.1.0)(tsx@4.21.0)
-
   packages/addon-server:
     dependencies:
       '@addons-poc/protocol':
@@ -146,19 +107,6 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.7(@edge-runtime/vm@3.2.0)(@types/node@20.11.0)(jsdom@26.1.0)(tsx@4.21.0)
-
-  packages/addon-text-wikipedia:
-    dependencies:
-      '@addons-poc/protocol':
-        specifier: 1.0.0
-        version: 1.0.0
-      '@addons/addon-server':
-        specifier: workspace:*
-        version: link:../addon-server
-    devDependencies:
       vitest:
         specifier: ^3.0.0
         version: 3.2.7(@edge-runtime/vm@3.2.0)(@types/node@20.11.0)(jsdom@26.1.0)(tsx@4.21.0)

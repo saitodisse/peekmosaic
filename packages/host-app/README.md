@@ -82,7 +82,7 @@ pnpm build:host
 pnpm check:host-boundary
 ```
 
-The local host server uses port `5280`. `pnpm dev` starts the host, two HTTP demonstration servers, and six in-process add-ons served by `scripts/serve-inprocess-addon.mjs`. The host discovers them through their manifest URLs.
+The local host server uses port `5280`. `pnpm dev` starts the host, one HTTP demonstration server, and three in-process add-ons served by `scripts/serve-inprocess-addon.mjs`. The host discovers them through their manifest URLs.
 
 ## Limits
 

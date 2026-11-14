@@ -4,6 +4,12 @@ This file describes, in reverse order, how the project evolved. The quick read s
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.19.5] - 2026-11-13
+
+### Removed
+
+- Remove the Wikipedia, Markdown, Favorites, and Add-on Health packages, local manifest suggestions, and development servers.
+
 ## [1.19.4] - 2026-11-13
 
 ### Added

@@ -1,7 +1,7 @@
 /**
  * Stops all development environment processes:
- * host-app (:5280), HTTP add-ons (:5294-5295), and in-process add-ons
- * (:5304-5309), including leftover dev-all orphans (Vite / add-on servers).
+ * host-app (:5280), HTTP add-on (:5295), and in-process add-ons
+ * (:5305, :5308, :5309), including leftover dev-all orphans (Vite / add-on servers).
  * Usage: pnpm kill-all
  * Sends SIGTERM and, if a process persists, SIGKILL.
  *
@@ -16,13 +16,13 @@ import { execFileSync } from 'node:child_process';
 
 const PORTS = [
   5280,
-  5294, 5295,
-  5304, 5305, 5306, 5307, 5308, 5309,
+  5295,
+  5305, 5308, 5309,
 ];
 
 /** PIDs listening on the port. fuser returns PIDs; ss is the fallback. */
 function pidsOnPort(port) {
-  // fuser: `fuser 5294/tcp` → "5294/tcp:  44364" (exit 1 when empty)
+  // fuser: `fuser 5295/tcp` → "5295/tcp:  44364" (exit 1 when empty)
   try {
     const out = execFileSync('fuser', [port + '/tcp'], {
       encoding: 'utf8',
@@ -33,7 +33,7 @@ function pidsOnPort(port) {
   } catch {
     /* fall back to ss */
   }
-  // ss: `ss -tlnp` → lines with ":5294" and users:(("node",pid=44364,fd=21))
+  // ss: `ss -tlnp` → lines with ":5295" and users:(("node",pid=44364,fd=21))
   try {
     const out = execFileSync('ss', ['-tlnp'], { encoding: 'utf8' });
     const line = out.split('\n').find((l) => l.includes(':' + port + ' '));
@@ -102,7 +102,7 @@ for (const port of PORTS) {
 for (const pattern of [
   'dev-all\\.mjs',
   'serve-inprocess-addon\\.mjs',
-  'addon-text-wikipedia',
+  'addon-chord-catalog',
   'vite/bin/vite\\.js',
 ]) {
   for (const pid of pidsByPattern(pattern)) {
