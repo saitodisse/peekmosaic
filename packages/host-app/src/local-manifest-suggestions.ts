@@ -15,12 +15,13 @@ export function localManifestUrl(port: number): string {
   return `http://localhost:${port}/manifest.json`;
 }
 
-export const PUBLISHED_RELEASE_VERSIONS = ['1.15.0', '1.16.0', '1.16.1', '1.16.2', '1.17.0', '1.17.1', '1.17.2'] as const;
+export const PUBLISHED_RELEASE_VERSIONS = ['1.15.0', '1.16.0', '1.16.1', '1.16.2', '1.17.0', '1.17.1', '1.17.2', '1.17.3'] as const;
 
 const PEEKMOSAIC_RELEASES_ORIGIN = 'https://www.peekmosaic.com/addons';
 const PUBLISHED_ADDON_IDS = ['chord-catalog', 'chord-viewer', 'storage-local', 'chord-editor'] as const;
 const PUBLISHED_ADDON_ID_SET = new Set<string>(PUBLISHED_ADDON_IDS);
 const PUBLISHED_RELEASE_MANIFESTS = [
+  { version: '1.17.3', addonIds: ['chord-catalog', 'chord-viewer', 'chord-editor'] },
   { version: '1.17.2', addonIds: ['chord-catalog', 'chord-viewer', 'chord-editor'] },
   { version: '1.17.1', addonIds: ['chord-viewer', 'chord-editor'] },
   { version: '1.17.0', addonIds: PUBLISHED_ADDON_IDS },

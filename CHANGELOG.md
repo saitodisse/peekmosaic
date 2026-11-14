@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [1.19.3] - 2026-11-13
 
+### Changed
+
+- Publish fixed add-on release 1.17.3 and suggest the updated catalogue, viewer, and editor through branded PeekMosaic URLs, preserving older releases.
+
 ### Fixed
 
 - Speed up artist result pages with persistent search and display metadata, avoiding repeated reads of complete chart blocks.
