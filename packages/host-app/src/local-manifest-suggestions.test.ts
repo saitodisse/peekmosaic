@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { LOCAL_MANIFEST_PORTS, LOCAL_MANIFEST_URLS, loadLocalManifestSuggestions, localManifestUrl, manifestSuggestions, olderManifestUrls, peekMosaicManifestUrl, prioritizePublishedAddonSuggestions, PUBLISHED_MANIFEST_URLS } from './local-manifest-suggestions';
+import { LOCAL_MANIFEST_PORTS, LOCAL_MANIFEST_URLS, loadLocalManifestSuggestions, localManifestUrl, manifestSuggestions, olderManifestUrls, peekMosaicManifestUrl, prioritizePublishedAddonSuggestions, PUBLISHED_MANIFEST_URLS, publishedReleaseDate } from './local-manifest-suggestions';
 
 describe('suggested local manifests', () => {
+  it('shows dates for branded and legacy releases without guessing dates for other URLs', () => {
+    expect(publishedReleaseDate('https://www.peekmosaic.com/addons/1.17.3/chord-catalog/manifest.json')).toBe('2026-11-13');
+    expect(publishedReleaseDate('https://addons-poc-release-1-17-2.vercel.app/chord-viewer/manifest.json')).toBe('2026-11-03');
+    expect(publishedReleaseDate('https://www.peekmosaic.com/addons/1.17.0/storage-local/manifest.json')).toBe('2026-11-02');
+    expect(publishedReleaseDate('http://localhost:5295/manifest.json')).toBeUndefined();
+    expect(publishedReleaseDate('https://example.test/addons/1.17.3/chord-catalog/manifest.json')).toBeUndefined();
+    expect(publishedReleaseDate('https://www.peekmosaic.com/addons/9.99.0/chord-catalog/manifest.json')).toBeUndefined();
+    expect(publishedReleaseDate('invalid')).toBeUndefined();
+  });
+
   it('keeps local URLs even before reading metadata', () => {
     expect(LOCAL_MANIFEST_URLS).toEqual([
       'http://localhost:5294/manifest.json',

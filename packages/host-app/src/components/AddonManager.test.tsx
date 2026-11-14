@@ -56,6 +56,8 @@ describe('available manifest versions', () => {
       .find((element) => element.textContent?.includes('v1.1.5'))!;
     expect(row.querySelector('code')?.textContent).toBe('https://www.peekmosaic.com/addons/1.16.2/chord-viewer/manifest.json');
     expect(row.textContent).toContain('Installed');
+    expect(row.querySelector('time')?.dateTime).toBe('2026-11-02');
+    expect(row.querySelector('time')?.textContent).toBe('02/11/2026');
     const install = row.querySelector<HTMLButtonElement>('button[aria-label^="Install "]')!;
     expect(install.disabled).toBe(true);
     await act(async () => root.unmount());

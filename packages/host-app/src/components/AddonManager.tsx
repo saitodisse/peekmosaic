@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { getInteractionContractFingerprint, getStateDestination, parseSemVer } from '@addons-poc/protocol';
 import type { AddonInstance, AddonManifest } from '@addons-poc/protocol';
 import { AddonCard } from './AddonCard';
+import { AddonReleaseDate } from './AddonReleaseDate';
 import { AddonContractView } from './AddonContractView';
 import { FactoryResetControl } from './FactoryResetControl';
 import { LOCAL_MANIFEST_SUGGESTIONS, groupManifestSuggestions, loadLocalManifestSuggestions, olderManifestUrls, peekMosaicManifestUrl, prioritizePublishedAddonSuggestions } from '../local-manifest-suggestions';
@@ -155,7 +156,7 @@ export function AddonManager({ addons, onResourcesChanged, disabledAddonUrls, pe
         }}
       >
         <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-          <strong style={{ display: 'block', color: '#e2e8f0', fontSize: 13, marginBottom: 3 }}>{suggestion.title}{suggestion.version ? ` · v${suggestion.version}` : ''}</strong>
+          <strong style={{ display: 'block', color: '#e2e8f0', fontSize: 13, marginBottom: 3 }}>{suggestion.title}{suggestion.version ? ` · v${suggestion.version}` : ''} <AddonReleaseDate manifestUrl={suggestion.manifestUrl} /></strong>
           <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 5 }}>
             {isLatest && <span style={{ color: '#56d8f5', fontSize: 11, fontWeight: 600 }}>Latest available</span>}
             {isInstalled && <span style={{ color: '#86efac', fontSize: 11, fontWeight: 600 }}>Installed{isDisabled ? ' · disabled' : ''}</span>}

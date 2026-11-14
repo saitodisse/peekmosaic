@@ -4,6 +4,12 @@ This file describes, in reverse order, how the project evolved. The quick read s
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.19.4] - 2026-11-13
+
+### Added
+
+- Show verified publication dates beside installed and available fixed add-on releases, including older versions and legacy manifest URLs.
+
 ## [1.19.3] - 2026-11-13
 
 ### Changed

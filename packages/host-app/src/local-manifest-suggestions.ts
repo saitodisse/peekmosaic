@@ -17,6 +17,29 @@ export function localManifestUrl(port: number): string {
 
 export const PUBLISHED_RELEASE_VERSIONS = ['1.15.0', '1.16.0', '1.16.1', '1.16.2', '1.17.0', '1.17.1', '1.17.2', '1.17.3'] as const;
 
+// Publication dates in America/Sao_Paulo, verified against the fixed deployments.
+const PUBLISHED_RELEASE_DATES: Record<string, string> = {
+  '1.15.0': '2026-10-31',
+  '1.16.0': '2026-10-31',
+  '1.16.1': '2026-11-02',
+  '1.16.2': '2026-11-02',
+  '1.17.0': '2026-11-02',
+  '1.17.1': '2026-11-02',
+  '1.17.2': '2026-11-03',
+  '1.17.3': '2026-11-13',
+};
+
+export function publishedReleaseDate(manifestUrl: string): string | undefined {
+  try {
+    const url = new URL(peekMosaicManifestUrl(manifestUrl));
+    if (url.origin !== 'https://www.peekmosaic.com') return undefined;
+    const version = /^\/addons\/(\d+\.\d+\.\d+)\/[^/]+\/manifest\.json$/.exec(url.pathname)?.[1];
+    return version ? PUBLISHED_RELEASE_DATES[version] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const PEEKMOSAIC_RELEASES_ORIGIN = 'https://www.peekmosaic.com/addons';
 const PUBLISHED_ADDON_IDS = ['chord-catalog', 'chord-viewer', 'storage-local', 'chord-editor'] as const;
 const PUBLISHED_ADDON_ID_SET = new Set<string>(PUBLISHED_ADDON_IDS);

@@ -5,6 +5,7 @@ import { addonRoute, href } from '../router';
 import { getSearchLanguages, parseSearchLimitInput } from '../search';
 import type { SearchLimitValue } from '../search';
 import { AddonSettingsPanel } from './AddonSettingsPanel';
+import { AddonReleaseDate } from './AddonReleaseDate';
 
 interface AddonCardProps {
   addon: AddonInstance;
@@ -52,6 +53,7 @@ export function AddonCard({ addon, onResourcesChanged, enabled, onToggle, onRemo
         }} />
         <strong style={{ color: '#f1f5f9', fontSize: 13, whiteSpace: 'nowrap' }}>{addon.manifest.name}</strong>
         <span style={{ color: '#64748b', fontSize: 12, whiteSpace: 'nowrap' }}>v{addon.manifest.version}</span>
+        <AddonReleaseDate manifestUrl={addon.manifestUrl} />
         <span style={{ color: '#64748b', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {addon.manifest.description}
         </span>
