@@ -503,7 +503,10 @@ that artist, then by documented connections and co-listening. Candidates who
 tie on all three criteria share a position.
 Category scores average the available model ratings. The sidebar orders
 categories by the selected artist's score. Category rankings order artists
-by score and share positions when scores tie. Co-listening uses the
+by that same score. Both lists break ties by the number of models contributing
+a rating, the mean category score across rated tracks, then the number of
+tracks with the maximum score. Artists with equal results on all criteria
+share a position. Co-listening uses the
 share of the selected artist's listeners who also listened to each candidate,
 subject to the dataset's minimum sample sizes. All views use the local import.
 

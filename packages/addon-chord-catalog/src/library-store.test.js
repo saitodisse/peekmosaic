@@ -25,22 +25,30 @@ describe('persistent source library', () => {
     expect(await store.listArtistSummaries()).toEqual([]);
   });
 
-  it('builds the artist directory from profiles already stored in version 7', async () => {
+  it.each([7, 8])('includes track ratings from profiles already stored in version %i', async (version) => {
     const indexedDB = new IDBFactory();
-    const profile = { slug: 'artist', name: 'Artist', ratings: { jev: { festa: 3 } }, related: [] };
+    const trackRatings = { microsoft: { festa: 3 } };
+    const profile = { slug: 'artist', name: 'Artist', ratings: { jev: { festa: 3 } },
+      songs: [{ title: 'Song', ratings: trackRatings }], related: [] };
     await new Promise((resolve, reject) => {
-      const request = indexedDB.open(LIBRARY_DATABASE, 7);
+      const request = indexedDB.open(LIBRARY_DATABASE, version);
       request.onupgradeneeded = () => {
         const db = request.result;
         for (const name of ['sources', 'chunks', 'search', 'locations']) db.createObjectStore(name);
         db.createObjectStore('artistRelations', { keyPath: 'slug' }).put(profile);
+        if (version === 8) {
+          db.createObjectStore('artistDirectory', { keyPath: 'slug' })
+            .put({ slug: 'artist', name: 'Artist', ratings: profile.ratings });
+        }
       };
       request.onerror = () => reject(request.error);
       request.onsuccess = () => { request.result.close(); resolve(); };
     });
     const migrated = createLibraryStore(indexedDB);
     expect(await migrated.getArtistRelations('artist')).toEqual(profile);
-    expect(await migrated.listArtistSummaries()).toEqual([{ slug: 'artist', name: 'Artist', ratings: profile.ratings }]);
+    expect(await migrated.listArtistSummaries()).toEqual([
+      { slug: 'artist', name: 'Artist', ratings: profile.ratings, trackRatings: [trackRatings] },
+    ]);
   });
 
   it('reads only the blocks containing requested charts, with ordered results and no full scan', async () => {

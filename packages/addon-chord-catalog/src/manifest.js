@@ -206,7 +206,7 @@ const trafficEntrySchema = object('One HTTP exchange observed by the server.', '
 export const manifest = defineAddonManifest({
   entrypoint: './bundle.js',
   id: 'chord-catalog',
-  version: '1.3.0',
+  version: '1.3.1',
   name: 'Chord Chart Catalogue',
   description: 'Lists, searches and imports chord charts, including locally decrypted private archives.',
   author: 'AC Team',
@@ -257,6 +257,8 @@ export const manifest = defineAddonManifest({
             slug: string('Stable artist identifier.'),
             name: string('Artist display name.'),
             ratings: object('Optional category ratings by model, from 0 to 3.', 'public', {}),
+            trackRatings: array('Optional ratings for the artist’s evaluated tracks.', 'public',
+              object('Category ratings by model for one track, from 0 to 3.', 'public', {})),
           }, ['slug', 'name']))) },
         { id: 'profile', description: 'Reads the relationships for one artist.',
           receives: payload('Artist identifier.', string('Stable artist identifier.')),

@@ -4,6 +4,17 @@ This file describes, in reverse order, how the project evolved. The quick read s
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.20.1] - 2026-11-22
+
+### Fixed
+
+- Rank artists and sidebar categories by their category score, using model coverage and track ratings to break ties. Preserve shared positions when the evidence is identical.
+- Migrate saved artist profiles automatically so their track ratings contribute to the rankings.
+
+### Changed
+
+- Publish fixed add-on release 1.18.1 with Chord Chart Catalogue 1.3.1.
+
 ## [1.20.0] - 2026-11-22
 
 ### Added

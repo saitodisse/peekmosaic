@@ -26,6 +26,9 @@ describe('suggested local manifests', () => {
     expect(manifestSuggestions('127.0.0.1').map((item) => item.manifestUrl)).toEqual(LOCAL_MANIFEST_URLS);
     expect(manifestSuggestions('www.peekmosaic.com').map((item) => item.manifestUrl)).toEqual([...PUBLISHED_MANIFEST_URLS]);
     expect(PUBLISHED_MANIFEST_URLS).toEqual([
+      'https://www.peekmosaic.com/addons/1.18.1/chord-catalog/manifest.json',
+      'https://www.peekmosaic.com/addons/1.18.1/chord-viewer/manifest.json',
+      'https://www.peekmosaic.com/addons/1.18.1/chord-editor/manifest.json',
       'https://www.peekmosaic.com/addons/1.18.0/chord-catalog/manifest.json',
       'https://www.peekmosaic.com/addons/1.18.0/chord-viewer/manifest.json',
       'https://www.peekmosaic.com/addons/1.18.0/chord-editor/manifest.json',

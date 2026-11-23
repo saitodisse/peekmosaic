@@ -2,10 +2,11 @@ import { createMetadataSearchEntry } from './catalog.js';
 import { sourcePageUrls } from './source-page.js';
 
 export const LIBRARY_DATABASE = 'addons:state:chord-catalog:v1';
-const LIBRARY_DATABASE_VERSION = 8;
+const LIBRARY_DATABASE_VERSION = 9;
 
-function artistSummary({ slug, name, ratings }) {
-  return { slug, name, ratings };
+function artistSummary({ slug, name, ratings, songs }) {
+  const trackRatings = songs?.flatMap(({ ratings }) => ratings ? [ratings] : []);
+  return { slug, name, ratings, ...(trackRatings?.length ? { trackRatings } : {}) };
 }
 
 function replaceArtistRelations(store, directory, records) {
@@ -69,16 +70,17 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
       const transaction = request.transaction;
       if (!db.objectStoreNames.contains('artistRelations')) db.createObjectStore('artistRelations', { keyPath: 'slug' });
       if (!db.objectStoreNames.contains('artistDirectory')) {
-        const directory = db.createObjectStore('artistDirectory', { keyPath: 'slug' });
-        if (event.oldVersion === 7) {
-          const profiles = transaction.objectStore('artistRelations').openCursor();
-          profiles.onsuccess = () => {
-            const cursor = profiles.result;
-            if (!cursor) return;
-            directory.put(artistSummary(cursor.value));
-            cursor.continue();
-          };
-        }
+        db.createObjectStore('artistDirectory', { keyPath: 'slug' });
+      }
+      if (event.oldVersion >= 7) {
+        const directory = transaction.objectStore('artistDirectory');
+        const profiles = transaction.objectStore('artistRelations').openCursor();
+        profiles.onsuccess = () => {
+          const cursor = profiles.result;
+          if (!cursor) return;
+          directory.put(artistSummary(cursor.value));
+          cursor.continue();
+        };
       }
       if (event.oldVersion >= 6) return;
       if (!db.objectStoreNames.contains('sources')) db.createObjectStore('sources', { keyPath: 'root' });

@@ -4,6 +4,27 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import type { ArtistRanking, ArtistRecommendationsProvider, Profile } from '../artist-recommendations';
 import { ArtistRecommendations } from './ArtistRecommendations';
+import { rankCategories, rankContext } from '../artist-recommendations';
+
+it('uses category evidence to order tied scores in both lists', () => {
+  const modelsAgree = { jev: { festa: 3, karaoke: 3 }, microsoft: { festa: 3, karaoke: 3 } };
+  const topTrack = { microsoft: { festa: 3, karaoke: 3 } };
+  const secondTrack = { microsoft: { festa: 3 } };
+  const profile: Profile = { slug: 'trio', name: 'Trio Mocotó', ratings: modelsAgree, related: [],
+    songs: [{ title: 'A', ratings: topTrack }, { title: 'B', ratings: secondTrack }] };
+  const directory = [
+    { slug: 'a', name: 'A', ratings: { microsoft: { festa: 3 } }, trackRatings: [topTrack] },
+    { slug: 'b', name: 'B', ratings: modelsAgree },
+    { slug: 'c', name: 'C', ratings: modelsAgree, trackRatings: [topTrack, { microsoft: { festa: 1 } }] },
+    { slug: 'd', name: 'D', ratings: modelsAgree, trackRatings: [topTrack] },
+    { slug: 'e', name: 'E', ratings: modelsAgree, trackRatings: [topTrack] },
+    { ...profile, trackRatings: [topTrack, secondTrack] },
+  ];
+  expect(rankContext(directory, 'festa').map(({ artist, position }) => [artist.name, position])).toEqual([
+    ['Trio Mocotó', 1], ['D', 2], ['E', 2], ['C', 4], ['B', 5], ['A', 6],
+  ]);
+  expect(rankCategories(directory, profile).map(({ goal }) => goal)).toEqual(['festa', 'karaoke']);
+});
 
 it('keeps related artists visible while ranking the full directory and filters co-listening by sample size', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);

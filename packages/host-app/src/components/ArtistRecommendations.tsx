@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { contexts, contextScore, findArtist, formatDay, goals, models, normalize, percentage, rankCoListening, rankContext, rankRelated } from '../artist-recommendations';
+import { contexts, findArtist, formatDay, models, normalize, percentage, rankCategories, rankCoListening, rankContext, rankRelated } from '../artist-recommendations';
 import type { ArtistRanking, ArtistRecommendationsProvider, ArtistSummary, Profile } from '../artist-recommendations';
 
 const scoreFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
@@ -41,9 +41,7 @@ export function ArtistRecommendations({ name, provider, revision, ranking, query
   const coListening = useMemo(() => profile ? rankCoListening(profile) : [], [profile]);
   const contextRanking = useMemo(() => ranking && ranking !== 'related' && ranking !== 'co-listening' && data
     ? rankContext(data.directory, ranking) : [], [ranking, data]);
-  const categories = goals.filter((goal) => data?.directory.some((artist) => contextScore(artist, goal) >= 0))
-    .map((goal) => ({ goal, score: profile ? contextScore(profile, goal) : -1 }))
-    .sort((a, b) => b.score - a.score);
+  const categories = useMemo(() => data ? rankCategories(data.directory, data.profile) : [], [data]);
   const relatedTitle = 'Artistas mais relacionados';
   const referenceArtist = profile?.name ?? name;
   const coListeningTitle = `Quem escuta ${referenceArtist} também escuta`;
@@ -52,7 +50,10 @@ export function ArtistRecommendations({ name, provider, revision, ranking, query
     ? related.map(({ artist, votes, position }) => ({ artist, detail: `${votes} de ${models.length} modelos`, style: artist.style, position }))
     : ranking === 'co-listening'
       ? coListening.map(({ artist, rates }, index) => ({ artist, detail: percentage.format(rates.fromArtist), position: index + 1 }))
-      : contextRanking.map(({ artist, score, position }) => ({ artist, detail: `${scoreFormat.format(score)}/3`, position }));
+      : contextRanking.map(({ artist, score, trackScore, position }) => ({
+        artist, detail: `${scoreFormat.format(score)}/3`, position,
+        style: trackScore >= 0 ? `Faixas ${scoreFormat.format(trackScore)}/3` : undefined,
+      }));
   const words = normalize(query.trim()).split(/\s+/).filter(Boolean);
   const visibleRanks = rankedArtists.filter(({ artist }) => words.every((word) => normalize(artist.name).includes(word)));
   const toggleRanking = (next: ArtistRanking) => onRankingChange(ranking === next ? null : next);
@@ -75,6 +76,9 @@ export function ArtistRecommendations({ name, provider, revision, ranking, query
       {data && !visibleRanks.length && <p>{query.trim() ? 'Nenhum artista corresponde à busca.' : 'O arquivo importado não tem dados para este ranking.'}</p>}
       {ranking === 'related' && visibleRanks.length > 0 && <p>
         Em ordem de concordância dos modelos sobre recomendações a partir de {referenceArtist}. Vínculos documentados e coescuta servem como desempate.
+      </p>}
+      {contextRanking.length > 0 && visibleRanks.length > 0 && <p>
+        Em ordem de nota na categoria. O desempate considera quantos modelos avaliaram, a média das faixas e quantas receberam nota máxima.
       </p>}
       {visibleRanks.length > 0 && <ol className="host-recommendation-list host-recommendation-ranking">
         {visibleRanks.map(({ artist, detail, style, position }) => (

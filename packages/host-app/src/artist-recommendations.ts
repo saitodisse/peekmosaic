@@ -18,7 +18,7 @@ export type Discovery = 'both' | 'ab' | 'ba' | 'neither' | 'unknown';
 export type Ratings = Partial<Record<Model, Partial<Record<Context, number>>>>;
 
 export const models = ['jev', 'microsoft'] as const;
-export type ArtistSummary = { slug: string; name: string; ratings?: Ratings };
+export type ArtistSummary = { slug: string; name: string; ratings?: Ratings; trackRatings?: Ratings[] };
 export type Artist = ArtistSummary & { style?: string; careerStart?: number; listeners?: number };
 export type Related = Artist & { sharedListeners?: number; discovery?: Partial<Record<Model, Discovery>>;
   evidence?: Array<{ kind: string; url: string; detail?: string }> };
@@ -50,12 +50,45 @@ export function isDiscoveryCandidate(artist: Related, model: Model) {
   return choice === 'ab' || choice === 'both';
 }
 
-export function contextScore(artist: ArtistSummary, context: Context) {
-  const available = models.flatMap((model) => {
-    const rating = artist.ratings?.[model]?.[context];
+function contextRatings(ratings: Ratings | undefined, context: Context) {
+  return models.flatMap((model) => {
+    const rating = ratings?.[model]?.[context];
     return typeof rating === 'number' && Number.isFinite(rating) && rating >= 0 && rating <= 3 ? [rating] : [];
   });
-  return available.length ? available.reduce((sum, rating) => sum + rating, 0) / available.length : -1;
+}
+
+function average(scores: number[]) {
+  return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : -1;
+}
+
+export function contextScore(artist: ArtistSummary, context: Context) {
+  return average(contextRatings(artist.ratings, context));
+}
+
+function contextFit(artist: Pick<ArtistSummary, 'ratings' | 'trackRatings'>, context: Context) {
+  const scores = contextRatings(artist.ratings, context);
+  const tracks = (artist.trackRatings ?? []).map((ratings) => average(contextRatings(ratings, context)))
+    .filter((score) => score >= 0);
+  return {
+    score: average(scores),
+    modelCount: scores.length,
+    trackScore: average(tracks),
+    topTracks: tracks.filter((score) => score === 3).length,
+  };
+}
+
+function compareContextFit(a: ReturnType<typeof contextFit>, b: ReturnType<typeof contextFit>) {
+  return b.score - a.score || b.modelCount - a.modelCount || b.trackScore - a.trackScore || b.topTracks - a.topTracks;
+}
+
+export function rankCategories(directory: ArtistSummary[], profile?: Profile) {
+  const artist = {
+    ratings: profile?.ratings,
+    trackRatings: profile?.songs?.flatMap(({ ratings }) => ratings ? [ratings] : []),
+  };
+  return goals.filter((goal) => directory.some((artist) => contextScore(artist, goal) >= 0))
+    .map((goal) => ({ goal, ...contextFit(artist, goal) }))
+    .sort(compareContextFit);
 }
 
 export function formatDay(value: string) {
@@ -91,9 +124,9 @@ function rankWithTies<T>(entries: T[], compare: (a: T, b: T) => number) {
 }
 
 export function rankContext(artists: ArtistSummary[], context: Context) {
-  const scored = artists.map((artist) => ({ artist, score: contextScore(artist, context) }))
+  const scored = artists.map((artist) => ({ artist, ...contextFit(artist, context) }))
     .filter(({ score }) => score >= 0);
-  return rankWithTies(scored, (a, b) => b.score - a.score);
+  return rankWithTies(scored, compareContextFit);
 }
 
 export function rankRelated(profile: Profile) {
