@@ -1,7 +1,21 @@
 import { createMetadataSearchEntry } from './catalog.js';
+import { sourcePageUrls } from './source-page.js';
 
 export const LIBRARY_DATABASE = 'addons:state:chord-catalog:v1';
-const LIBRARY_DATABASE_VERSION = 5;
+const LIBRARY_DATABASE_VERSION = 8;
+
+function artistSummary({ slug, name, ratings }) {
+  return { slug, name, ratings };
+}
+
+function replaceArtistRelations(store, directory, records) {
+  store.clear();
+  directory.clear();
+  for (const record of records) {
+    store.put(record);
+    directory.put(artistSummary(record));
+  }
+}
 
 function selectedGenre(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -24,6 +38,7 @@ function compactLegacyChart(chart) {
   const source = chart?.scraperMetadata;
   if (!source) return false;
   delete chart.scraperMetadata;
+  Object.assign(chart, sourcePageUrls(source.page, chart.sourceUrl ?? source.sourceUrl));
   const genre = selectedGenre(chart.genre ?? source.artist?.genre);
   const statistics = selectedStatistics(chart.statistics ?? source.chart?.statistics);
   delete chart.chords;
@@ -39,28 +54,6 @@ function compactLegacyChart(chart) {
   return true;
 }
 
-function migrateCharts(store) {
-  const request = store.openCursor();
-  request.onsuccess = () => {
-    const cursor = request.result;
-    if (!cursor) return;
-    const record = cursor.value;
-    if (Array.isArray(record.charts)) {
-      let changed = false;
-      for (const chart of record.charts) if (compactLegacyChart(chart)) changed = true;
-      if (changed) cursor.update(record);
-    }
-    cursor.continue();
-  };
-}
-
-/** Replaces complete legacy source metadata with the fields still used by the app. */
-function migrateUnusedScraperMetadata(transaction, oldVersion) {
-  if (oldVersion >= 3) return;
-  migrateCharts(transaction.objectStore('sources'));
-  migrateCharts(transaction.objectStore('chunks'));
-}
-
 function chartLocations(root, index, charts) {
   return { root, index, ids: charts.map(chart => chart.id).filter(id => typeof id === 'string') };
 }
@@ -74,6 +67,20 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
     request.onupgradeneeded = (event) => {
       const db = request.result;
       const transaction = request.transaction;
+      if (!db.objectStoreNames.contains('artistRelations')) db.createObjectStore('artistRelations', { keyPath: 'slug' });
+      if (!db.objectStoreNames.contains('artistDirectory')) {
+        const directory = db.createObjectStore('artistDirectory', { keyPath: 'slug' });
+        if (event.oldVersion === 7) {
+          const profiles = transaction.objectStore('artistRelations').openCursor();
+          profiles.onsuccess = () => {
+            const cursor = profiles.result;
+            if (!cursor) return;
+            directory.put(artistSummary(cursor.value));
+            cursor.continue();
+          };
+        }
+      }
+      if (event.oldVersion >= 6) return;
       if (!db.objectStoreNames.contains('sources')) db.createObjectStore('sources', { keyPath: 'root' });
       if (!db.objectStoreNames.contains('chunks')) {
         const chunks = db.createObjectStore('chunks', { keyPath: ['root', 'index'] });
@@ -82,42 +89,36 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
         const chunks = transaction.objectStore('chunks');
         if (!chunks.indexNames.contains('root')) chunks.createIndex('root', 'root');
       }
-      migrateUnusedScraperMetadata(transaction, event.oldVersion);
       if (!db.objectStoreNames.contains('search')) {
         const search = db.createObjectStore('search', { keyPath: ['root', 'index'] });
         search.createIndex('root', 'root');
-        for (const name of ['sources', 'chunks']) {
-          const cursorRequest = transaction.objectStore(name).openCursor();
-          cursorRequest.onsuccess = () => {
-            const cursor = cursorRequest.result;
-            if (!cursor) return;
-            const record = cursor.value;
-            if (Array.isArray(record.charts)) {
-              search.put({
-                root: record.root, index: name === 'sources' ? -1 : record.index,
-                entries: record.charts.map(createMetadataSearchEntry),
-              });
-            }
-            cursor.continue();
-          };
-        }
       }
-      if (!db.objectStoreNames.contains('locations')) {
+      const needsLocations = !db.objectStoreNames.contains('locations');
+      if (needsLocations) {
         const locations = db.createObjectStore('locations', { keyPath: ['root', 'index'] });
         locations.createIndex('ids', 'ids', { multiEntry: true });
         locations.createIndex('root', 'root');
-        for (const name of ['sources', 'chunks']) {
-          const cursorRequest = transaction.objectStore(name).openCursor();
-          cursorRequest.onsuccess = () => {
-            const cursor = cursorRequest.result;
-            if (!cursor) return;
-            const record = cursor.value;
-            if (Array.isArray(record.charts)) {
-              locations.put(chartLocations(record.root, name === 'sources' ? -1 : record.index, record.charts));
+      }
+      const search = transaction.objectStore('search');
+      const locations = transaction.objectStore('locations');
+      for (const name of ['sources', 'chunks']) {
+        const cursorRequest = transaction.objectStore(name).openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const record = cursor.value;
+          const { root, charts, index = -1 } = record;
+          if (Array.isArray(charts)) {
+            if (event.oldVersion < 3) {
+              let changed = false;
+              for (const chart of charts) if (compactLegacyChart(chart)) changed = true;
+              if (changed) cursor.update(record);
             }
-            cursor.continue();
-          };
-        }
+            search.put({ root, index, entries: charts.map(createMetadataSearchEntry) });
+            if (needsLocations) locations.put(chartLocations(root, index, charts));
+          }
+          cursor.continue();
+        };
       }
     };
     request.onsuccess = () => {
@@ -131,12 +132,12 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
   async function execute(mode, operation) {
     const db = await open();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(['sources', 'chunks', 'search', 'locations'], mode);
+      const transaction = db.transaction(['sources', 'chunks', 'search', 'locations', 'artistRelations', 'artistDirectory'], mode);
       let result;
       transaction.oncomplete = () => { try { resolve(result?.()); } catch (error) { reject(error); } };
       transaction.onerror = () => reject(transaction.error ?? new Error('Library transaction failed.'));
       transaction.onabort = () => reject(transaction.error ?? new Error('Library write aborted.'));
-      try { result = operation(transaction.objectStore('sources'), transaction.objectStore('chunks'), transaction.objectStore('search'), transaction.objectStore('locations')); }
+      try { result = operation(transaction.objectStore('sources'), transaction.objectStore('chunks'), transaction.objectStore('search'), transaction.objectStore('locations'), transaction.objectStore('artistRelations'), transaction.objectStore('artistDirectory')); }
       catch (error) { transaction.abort(); reject(error); }
     });
   }
@@ -152,7 +153,8 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
       size += bytes;
     }
     if (charts.length) parts.push(charts);
-    return execute('readwrite', (sources, chunks, search, locations) => {
+    return execute('readwrite', (sources, chunks, search, locations, artistRelations, artistDirectory) => {
+      if (snapshot?.artistRelations) replaceArtistRelations(artistRelations, artistDirectory, snapshot.artistRelations);
       const oldLocations = locations.index('root').openKeyCursor(root);
       oldLocations.onsuccess = () => {
         if (oldLocations.result) { locations.delete(oldLocations.result.primaryKey); oldLocations.result.continue(); return; }
@@ -167,7 +169,7 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
       cursor.onsuccess = () => {
         if (cursor.result) { chunks.delete(cursor.result.primaryKey); cursor.result.continue(); return; }
         if (snapshot) {
-          const { charts: ignored, ...metadata } = snapshot;
+          const { charts: ignoredCharts, artistRelations: ignoredRelations, ...metadata } = snapshot;
           sources.put({ ...metadata, chunkCount: parts.length, chartCount: snapshot.charts.length });
           parts.forEach((charts, index) => chunks.put({ root, index, charts }));
         } else sources.delete(root);
@@ -285,6 +287,27 @@ export function createLibraryStore(indexedDB = globalThis.indexedDB) {
     getChartsByIds,
     put: (snapshot) => replace(snapshot.root, snapshot),
     remove: (root) => replace(root),
-    clear: () => execute('readwrite', (sources, chunks, search, locations) => { sources.clear(); chunks.clear(); search.clear(); locations.clear(); }),
+    hasArtistRelations: (slug) => execute('readonly', (_sources, _chunks, _search, _locations, artistRelations) => {
+      const key = artistRelations.getKey(slug);
+      return () => key.result !== undefined;
+    }),
+    getArtistRelations: (slug) => execute('readonly', (_sources, _chunks, _search, _locations, artistRelations) => {
+      const record = artistRelations.get(slug);
+      return () => record.result;
+    }),
+    listArtistSummaries: () => execute('readonly', (_sources, _chunks, _search, _locations, _artistRelations, artistDirectory) => {
+      const records = artistDirectory.getAll();
+      return () => records.result;
+    }),
+    putArtistRelations: (records) => execute('readwrite', (_sources, _chunks, _search, _locations, artistRelations, artistDirectory) => {
+      replaceArtistRelations(artistRelations, artistDirectory, records);
+    }),
+    countArtistRelations: () => execute('readonly', (_sources, _chunks, _search, _locations, artistRelations) => {
+      const count = artistRelations.count();
+      return () => count.result;
+    }),
+    clear: () => execute('readwrite', (sources, chunks, search, locations, artistRelations, artistDirectory) => {
+      sources.clear(); chunks.clear(); search.clear(); locations.clear(); artistRelations.clear(); artistDirectory.clear();
+    }),
   };
 }

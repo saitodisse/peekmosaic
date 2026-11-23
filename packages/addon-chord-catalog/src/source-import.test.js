@@ -6,6 +6,31 @@ import { readFile } from 'node:fs/promises';
 import { encryptedTestArchive } from './test-crypto-fixture.js';
 
 const ROOT = 'https://example.test/source-catalog/';
+
+it('imports the optional artist relationship sidecar from ZIP alongside charts', async () => {
+  const { bytes: fixture } = await scraperZip();
+  const path = 'downloads/artist-relations.v1.json';
+  const dataset = {
+    schemaVersion: 1, catalogue: 'artist-portal-scraper',
+    artists: [{ slug: 'one', name: 'One' }, { slug: 'two', name: 'Two' }],
+    pairs: [{ a: 'one', b: 'two', discovery: { jev: 'ab', microsoft: 'both' } }],
+  };
+  const zipped = zipSync({ ...unzipSync(fixture), [path]: strToU8(JSON.stringify(dataset)) });
+  const snapshot = await importArchive(ROOT, zipped);
+  expect(snapshot.charts).toHaveLength(1);
+  expect(snapshot.artistRelations[0].related[0].discovery).toEqual({ jev: 'ab', microsoft: 'both' });
+  expect(snapshot.artistRelations[1].related[0].discovery).toEqual({ jev: 'ba', microsoft: 'both' });
+
+  const mixedInvalid = zipSync({ ...unzipSync(fixture), [path]: strToU8('invalid') });
+  const recovered = await importArchive(ROOT, mixedInvalid);
+  expect(recovered.charts).toHaveLength(1);
+  expect(recovered).not.toHaveProperty('artistRelations');
+  expect(recovered.warnings).toContain('Invalid artist relationships: expected UTF-8 JSON.');
+
+  const standalone = await importArchive(ROOT, zipSync({ [path]: strToU8(JSON.stringify(dataset)) }));
+  expect(standalone.charts).toEqual([]);
+  expect(standalone.artistRelations).toHaveLength(2);
+});
 async function fixture({ broken = false, corrupt = false, sidecar = true, inline = true, path = 'entities/charts.ndjson' } = {}) {
   const schemaVersion = '1.3.0';
   const envelope = (entityType, id, payload) => ({ sourceId: 'source-a', schemaVersion, entityType, sourceRecordId: id, payload });
@@ -95,6 +120,7 @@ async function scraperZip({ prefix = 'downloads/artist/', changeText = false, mi
   const data = {
     source: 'Cifra Club', sourceUrl: 'https://www.cifraclub.com.br/artist/song/', collectedAt: '2026-10-18T12:00:00Z',
     artist: { name: 'Artista', slug: 'artist', genre: { name: 'MPB' } }, title: 'Canção',
+    page: { canonicalUrl: 'https://www.cifraclub.com.br/artist/canonical/', imageUrl: '/images/song.jpg' },
     file: { name: 'song.txt', sha256: await sha256(SCRAPER_TEXT), bytes: strToU8(SCRAPER_TEXT).length },
     chart: { displayedKey: 'C', capo: 2, tuning: 'E A D G B E', instrument: { slug: 'cifra-group' }, composers: ['Compositor'], version: { name: 'Principal' }, statistics: { allTimeViews: 1234, listAppearances: 42 } },
     chords: [{ name: 'C', shapes: { guitar: ['X 3 2 0 1 0'] } }, { name: 'G' }],
@@ -228,12 +254,14 @@ describe('ZIP source imports', () => {
     expect(snapshot.charts[0]).toMatchObject({ title: 'Canção', text: SCRAPER_TEXT, artist: { name: 'Artista', slug: 'artist' },
       key: 'C', capo: 2, composers: ['Compositor'], genre: { name: 'MPB' }, tags: ['MPB'], visits: 1234,
       statistics: { allTimeViews: 1234, listAppearances: 42 }, collectedAt: data.collectedAt,
+      canonicalUrl: data.page.canonicalUrl, imageUrl: 'https://www.cifraclub.com.br/images/song.jpg',
       sourceUrl: data.sourceUrl, instrumentId: 'guitar', tuningId: 'guitar-standard' });
     expect(snapshot.charts[0]).not.toHaveProperty('scraperMetadata');
     expect(snapshot.charts[0]).not.toHaveProperty('chords');
     const payload = toContentJson(snapshot.charts[0], { baseUrl: 'https://example.test/', checksum: snapshot.charts[0].checksum });
     expect(payload.musicalWork.genre).toEqual({ name: 'MPB' });
     expect(payload.playableVersion.statistics).toEqual({ allTimeViews: 1234, listAppearances: 42 });
+    expect(payload.source).toMatchObject({ canonicalUrl: data.page.canonicalUrl, imageUrl: 'https://www.cifraclub.com.br/images/song.jpg' });
   });
 
   it('imports multiple artists together and reports auxiliary TXT files without metadata', async () => {
@@ -296,7 +324,7 @@ describe('ZIP source imports', () => {
     for (const [bytes, message] of [
       [zipSync({ '../escape.txt': strToU8('x') }), /Unsafe ZIP path/],
       [zipSync({ 'readme.json': strToU8('{}') }), /neither a Source Catalog/],
-      [strToU8('<html>not a zip</html>'), /did not return a ZIP/],
+      [strToU8('<html>not a zip</html>'), /not a ZIP/],
     ]) await expect(importSource(ZIP_URL, zipFetch(bytes))).rejects.toThrow(message);
   });
 

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { validateManifest } from '@addons-poc/protocol';
+import { TEST_CHARTS } from './fixtures/chart-records.js';
 import { manifest } from './manifest.js';
 import { catalog, chartContentUrl, content, contentJson, search, text } from './handlers.js';
 
 const BASE = 'http://localhost:5295';
-const dependencies = { baseUrl: BASE, now: () => new Date('2026-01-01T00:00:00.000Z'), requestId: () => 'req-1' };
+const dependencies = { charts: TEST_CHARTS, baseUrl: BASE, now: () => new Date('2026-01-01T00:00:00.000Z'), requestId: () => 'req-1' };
 
 describe('manifest', () => {
   it('passes the canonical validation', () => {
@@ -35,7 +36,7 @@ describe('catalog handler', () => {
     expect(payload.metas).toHaveLength(2);
     expect(payload.metas[0].type).toBe('chart');
     expect(payload.metas[0].url.startsWith(`${BASE}/text/chart/`)).toBe(true);
-    expect(payload.pagination).toEqual({ limit: 2, total: 8, next: '2' });
+    expect(payload.pagination).toEqual({ limit: 2, total: 3, next: '2' });
   });
 
   it('returns nothing for an unknown type', async () => {
@@ -45,7 +46,7 @@ describe('catalog handler', () => {
 
 describe('search handler', () => {
   it('normalizes the query and paginates the rows', async () => {
-    const payload = await search('chart', 'vela nova', { limit: 1 }, dependencies);
+    const payload = await search('chart', 'test artist', { limit: 1 }, dependencies);
     expect(payload.metas).toHaveLength(1);
     expect(payload.pagination.limit).toBe(1);
     expect(payload.metas[0].description).toContain('key');
@@ -59,10 +60,10 @@ describe('search handler', () => {
 
 describe('text handler', () => {
   it('publishes the content links of one chart', async () => {
-    const payload = await text('chart', 'harbor-light', {}, dependencies);
+    const payload = await text('chart', 'chart-a', {}, dependencies);
     expect(payload.texts).toHaveLength(1);
-    expect(payload.texts[0].url).toBe(`${BASE}/text/chart/harbor-light/content.txt`);
-    expect(payload.texts[0].contentJsonUrl).toBe(`${BASE}/text/chart/harbor-light/content.json`);
+    expect(payload.texts[0].url).toBe(`${BASE}/text/chart/chart-a/content.txt`);
+    expect(payload.texts[0].contentJsonUrl).toBe(`${BASE}/text/chart/chart-a/content.json`);
   });
 
   it('fails with a 404 for an unknown chart', async () => {
@@ -72,36 +73,36 @@ describe('text handler', () => {
 
 describe('content handler', () => {
   it('returns the chart text with its section markers', async () => {
-    const body = await content('chart', 'harbor-light', {}, dependencies);
+    const body = await content('chart', 'chart-a', {}, dependencies);
     expect(body.startsWith('[Intro]')).toBe(true);
-    expect(body).toContain('Harbor light is everywhere');
+    expect(body).toContain('First line');
   });
 });
 
 describe('contentJson handler', () => {
   it('returns the structured payload with the chart record', async () => {
-    const payload = await contentJson('chart', 'harbor-light', {}, dependencies);
+    const payload = await contentJson('chart', 'chart-a', {}, dependencies);
     const body = payload.body;
-    expect(body.id).toBe('harbor-light');
-    expect(body.musicalWork.artistName).toBe('Mare Alta');
+    expect(body.id).toBe('chart-a');
+    expect(body.musicalWork.artistName).toBe('Test Artist');
     const youtube = new URL(body.externalLinks.find((link) => link.label === 'YouTube').url);
     const music = new URL(body.externalLinks.find((link) => link.label === 'YouTube Music').url);
     expect(youtube.origin).toBe('https://www.youtube.com');
-    expect(youtube.searchParams.get('search_query')).toBe('Mare Alta Harbor Light');
+    expect(youtube.searchParams.get('search_query')).toBe('Test Artist Alpha');
     expect(music.origin).toBe('https://music.youtube.com');
-    expect(music.searchParams.get('q')).toBe('Mare Alta Harbor Light');
+    expect(music.searchParams.get('q')).toBe('Test Artist Alpha');
     expect(body.playableVersion.key).toBe('G');
     expect(body.sections[0]).toEqual({ title: 'Intro', line: 0 });
     expect(body.chords.some((chord) => chord.symbol === 'D/F#')).toBe(true);
     expect(body.chordChart.rawTextChecksum).toMatch(/^[a-f0-9]{64}$/u);
-    expect(body.chordChart.playableVersionId).toBe('harbor-light-original');
+    expect(body.chordChart.playableVersionId).toBe('chart-a-original');
     expect(body.content.charCount).toBeGreaterThan(0);
     expect(body.source.license).toBe('MIT');
     expect(body.observability.requestId).toBe('req-1');
   });
 
   it('publishes shapes only for the chords of the chart', async () => {
-    const payload = await contentJson('chart', 'copper-kettle-road', {}, dependencies);
+    const payload = await contentJson('chart', 'chart-b', {}, dependencies);
     const symbols = payload.body.chords.map((chord) => chord.symbol);
     expect(symbols).toContain('Bb7M');
     expect(symbols.every((symbol) => payload.body.content.text.includes(symbol))).toBe(true);
@@ -110,7 +111,7 @@ describe('contentJson handler', () => {
 
 describe('chartContentUrl', () => {
   it('builds an absolute URL for one chart', () => {
-    expect(chartContentUrl(BASE, 'harbor-light')).toBe(`${BASE}/text/chart/harbor-light/content.txt`);
-    expect(chartContentUrl(`${BASE}/`, 'harbor-light', 'json')).toBe(`${BASE}/text/chart/harbor-light/content.json`);
+    expect(chartContentUrl(BASE, 'chart-a')).toBe(`${BASE}/text/chart/chart-a/content.txt`);
+    expect(chartContentUrl(`${BASE}/`, 'chart-a', 'json')).toBe(`${BASE}/text/chart/chart-a/content.json`);
   });
 });

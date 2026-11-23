@@ -7,7 +7,6 @@ export const CHART_TYPE = 'chart';
 export const CONTENT_PATH = 'text';
 
 export const CONTENT_LICENSE = 'MIT';
-export const PROVENANCE_NOTICE = 'Synthetic demo catalogue created for this POC; no published catalogue was copied.';
 /** Versions of the parser and of the AST that the text is published against. */
 export const PARSER_VERSION = '1.0.0';
 export const AST_VERSION = '1.0.0';
@@ -64,7 +63,7 @@ export function toMeta(chart, baseUrl) {
 /** Voicing shapes of the chart, so a renderer never needs a second lookup. */
 export function chartVoicings(chart) {
   return (chart.chords ?? []).map((symbol) => {
-    // Imported chords do not inherit demo fingerings.
+    // Imported charts retain their declared chord symbols.
     if (chart.sourceRoot) return { symbol };
     const voicing = VOICINGS[symbol];
     if (!voicing) return { symbol };
@@ -98,11 +97,12 @@ export function toTextOption(chart, baseUrl) {
  * add-on so both add-ons are read the same way.
  */
 export function toContentJson(chart, options) {
-  const { baseUrl, requestId, durationMs, generatedAt } = options;
+  const { baseUrl, requestId, durationMs, generatedAt, catalogueMaxViews } = options;
   const text = chart.text;
   const contentUrl = absolute(baseUrl, contentPath(chart, 'json'));
   const genre = chart.genre;
   const statistics = chart.statistics;
+  const sourceUrl = chart.sourceUrl ?? chart.sourceRoot ?? contentUrl;
   return {
     id: chart.id,
     type: CHART_TYPE,
@@ -131,7 +131,12 @@ export function toContentJson(chart, options) {
       tempo: chart.tempo,
       time: chart.time,
       difficulty: chart.difficulty,
-      ...(statistics && typeof statistics === 'object' && !Array.isArray(statistics) ? { statistics } : {}),
+      ...(statistics && typeof statistics === 'object' && !Array.isArray(statistics) ? {
+        statistics: {
+          ...statistics,
+          ...(catalogueMaxViews > 0 ? { catalogueMaxViews } : {}),
+        },
+      } : {}),
     },
     notation: {
       format: 'chord-over-lyrics',
@@ -170,12 +175,13 @@ export function toContentJson(chart, options) {
       encoding: 'utf-8',
     },
     source: {
-      name: 'Chord chart catalogue',
-      provider: 'addon-chord-catalog',
-      origin: new URL(baseUrl).origin,
-      url: contentUrl,
-      license: CONTENT_LICENSE,
-      notice: PROVENANCE_NOTICE,
+      name: chart.sourceName ?? 'Chord chart catalogue',
+      provider: chart.sourceRoot ? 'chord-catalog' : 'addon-chord-catalog',
+      origin: new URL(sourceUrl).origin,
+      url: sourceUrl,
+      ...(chart.canonicalUrl ? { canonicalUrl: chart.canonicalUrl } : {}),
+      ...(chart.imageUrl ? { imageUrl: chart.imageUrl } : {}),
+      ...(chart.sourceRoot ? { catalogueUrl: chart.sourceRoot } : { license: CONTENT_LICENSE }),
     },
     observability: {
       requestId: requestId ?? 'not-recorded',

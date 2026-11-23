@@ -15,6 +15,5 @@ for (const name of ['chord-editor', 'chord-viewer', 'storage-local', 'chord-cata
   await writeFile(resolve(dir, 'manifest.json'), JSON.stringify({ ...manifest, entrypoint: `${origin}/${name}/bundle.js` }, null, 2));
 }
 await cp(resolve(root, 'packages/addon-chord-editor/node_modules/monaco-editor/min/vs'), resolve(output, 'chord-editor/monaco/vs'), { recursive: true });
-await cp(resolve(root, 'packages/addon-chord-catalog/assets/artists'), resolve(output, 'artists'), { recursive: true });
 
 process.exit(0);

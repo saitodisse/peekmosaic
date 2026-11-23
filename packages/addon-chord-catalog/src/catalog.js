@@ -114,6 +114,7 @@ export function createMetadataSearchEntry(chart) {
     title: chart.title ?? '',
     artist: chart.artist?.name ?? '',
     genre,
+    statistics: chart.statistics,
     chart: {
       id: chart.id, title: chart.title, artist: chart.artist, album: chart.album,
       key: chart.key, capo: chart.capo, tempo: chart.tempo,
@@ -125,8 +126,22 @@ export function createMetadataSearchIndex(charts) {
   return charts.map(createMetadataSearchEntry);
 }
 
+/** Highest recorded view count across charts or their metadata entries. */
+export function maximumChartViews(charts) {
+  let max = 0;
+  for (const { statistics } of charts) {
+    const views = statistics?.allTimeViews;
+    if (Number.isSafeInteger(views) && views > max) max = views;
+  }
+  return max;
+}
+
+function compareStatistics(left, right, order) {
+  return order ? (right.statistics?.[order] ?? -Infinity) - (left.statistics?.[order] ?? -Infinity) : 0;
+}
+
 /** Searches only titles, artist names, and genres without retaining chart bodies. */
-export function searchMetadataIndex(index, query) {
+export function searchMetadataIndex(index, query, order = '') {
   const terms = normalizeText(query).split(' ').filter(Boolean);
   if (terms.length === 0) return [];
 
@@ -152,16 +167,18 @@ export function searchMetadataIndex(index, query) {
     })
     .filter((match) => match.score > 0)
     .sort((left, right) =>
+      compareStatistics(left.entry, right.entry, order) ||
       right.score - left.score || left.entry.title.localeCompare(right.entry.title))
     .map((match) => match.entry);
 }
 
 /** Named views over the same data set. An unknown identifier returns nothing. */
-export function listCatalog(charts, catalogId) {
+export function listCatalog(charts, catalogId, order = '') {
   const ordered = [...charts];
   switch (catalogId) {
     case 'recent':
-      return ordered.sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+      return ordered.sort((left, right) =>
+        compareStatistics(left, right, order) || String(right.updatedAt).localeCompare(String(left.updatedAt)));
     case 'popular':
       return ordered.sort((left, right) => (right.visits ?? 0) - (left.visits ?? 0));
     case 'beginner':

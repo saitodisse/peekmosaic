@@ -6,6 +6,7 @@ interface HeaderProps {
   searchValue: string;
   searchDisabled?: boolean;
   searching?: boolean;
+  searchLabel?: string;
   onSearchValueChange: (value: string) => void;
   onSearch: (value: string) => void;
   onClearSearch: () => void;
@@ -17,6 +18,7 @@ export function Header({
   searchValue,
   searchDisabled = false,
   searching = false,
+  searchLabel = "Search add-ons",
   onSearchValueChange,
   onSearch,
   onClearSearch,
@@ -41,7 +43,7 @@ export function Header({
           }}
         >
           <label htmlFor="global-addon-search" className="host-visually-hidden">
-            Search add-ons
+            {searchLabel}
           </label>
           <div className="host-header-search-field">
             <input
@@ -56,7 +58,7 @@ export function Header({
                 onSearchValueChange(value);
                 if (!value) onClearSearch();
               }}
-              placeholder="Search add-ons…"
+              placeholder={`${searchLabel}…`}
               aria-keyshortcuts="Enter Escape"
               disabled={searchDisabled}
             />

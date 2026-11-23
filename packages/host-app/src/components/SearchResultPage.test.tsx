@@ -7,7 +7,13 @@ import type { ContentEditorProvider } from '../content-editor';
 import type { ContentViewProvider } from '../content-view';
 import type { SearchResultRow } from '../search';
 import type { AddonInstance } from '@addons-poc/protocol';
+import { isFavorite, setFavorite } from '../favorites-store';
 import { SearchResultPage } from './SearchResultPage';
+
+vi.mock('../favorites-store', () => ({
+  isFavorite: vi.fn(async () => false),
+  setFavorite: vi.fn(async () => undefined),
+}));
 
 const chartUrl = 'http://localhost:5295/text/chart/static-and-rain/content.txt';
 const chart: SearchResultRow = {
@@ -65,6 +71,31 @@ describe('SearchResultPage', () => {
     });
     expect(container.textContent).not.toContain('Wikipedia');
     expect(container.querySelector('pre')?.textContent).toBe(body);
+  });
+
+  it.each([
+    [500_000, 2_000_000, '25%'],
+    [2_000_000, 2_000_000, '100%'],
+    [1_999_999, 2_000_000, '>99,99%'],
+    [0, 2_000_000, '0%'],
+    [42, undefined, undefined],
+  ])('renders views (%s) under the chart title using catalogue maximum %s', async (allTimeViews, catalogueMaxViews, label) => {
+    const viewProvider: ContentViewProvider = { render: () => ({ html: '<pre>C</pre>', title: 'Casa no Campo' }) };
+    const fetchResource = vi.fn(async () => Response.json({
+      playableVersion: { statistics: { allTimeViews, catalogueMaxViews } },
+    })) as unknown as typeof fetch;
+    await act(async () => {
+      root.render(<SearchResultPage contentUrl={chartUrl} result={chart} ready viewProvider={viewProvider} fetchResource={fetchResource} />);
+    });
+    const popularity = container.querySelector('.host-rendered-header h1 + .host-chart-popularity');
+    expect(popularity?.textContent).toContain(new Intl.NumberFormat('pt-BR').format(allTimeViews));
+    const meter = popularity?.querySelector('meter');
+    if (catalogueMaxViews) {
+      expect(meter?.getAttribute('aria-valuetext')).toBe(label);
+      expect(meter?.value).toBeCloseTo(allTimeViews / catalogueMaxViews * 100);
+    } else {
+      expect(meter).toBeNull();
+    }
   });
 
   it('shows the final rendered chart and Edit together, even when the chart finishes first', async () => {
@@ -125,6 +156,20 @@ describe('SearchResultPage', () => {
       expect(statusTarget.querySelector('.host-reading-status-title')?.textContent).toBe(container.querySelector('.host-article-header h1')?.textContent);
       expect(statusTarget.textContent).not.toContain('Transpose');
       expect(statusTarget.textContent).toContain('KeyG');
+      const favorite = statusTarget.querySelector<HTMLButtonElement>('button[aria-label="Favorito"]')!;
+      expect(favorite.previousElementSibling?.textContent).toBe('KeyG');
+      expect(favorite.getAttribute('aria-pressed')).toBe('false');
+      expect(isFavorite).toHaveBeenCalledWith(chartUrl);
+      await act(async () => favorite.click());
+      expect(setFavorite).toHaveBeenLastCalledWith(chartUrl, 'Concrete Jungle — Bob Marley', true);
+      expect(favorite.getAttribute('aria-pressed')).toBe('true');
+      vi.mocked(setFavorite).mockRejectedValueOnce(new Error('Write failed'));
+      await act(async () => favorite.click());
+      expect(favorite.getAttribute('aria-pressed')).toBe('true');
+      expect(statusTarget.querySelector('[role="alert"]')?.textContent).toBe('Não foi possível atualizar o favorito.');
+      await act(async () => favorite.click());
+      expect(setFavorite).toHaveBeenLastCalledWith(chartUrl, 'Concrete Jungle — Bob Marley', false);
+      expect(favorite.getAttribute('aria-pressed')).toBe('false');
       await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: '=' })));
       await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: ']' })));
       await act(async () => container.querySelector<HTMLButtonElement>('.host-tab-panel-disclosure')!.click());

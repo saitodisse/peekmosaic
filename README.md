@@ -59,7 +59,7 @@ The command starts the host at `http://localhost:5280`, one HTTP server, and thr
 
 | Port | Add-on | Content source |
 |---:|---|---|
-| `5295` | Chord chart catalogue | The demo chart data set |
+| `5295` | Chord chart catalogue | Chord chart import and search |
 
 The in-process add-ons use ports `5305`, `5308`, and `5309`. For example, `http://localhost:5305/manifest.json` publishes the chord viewer, and `http://localhost:5309/manifest.json` publishes the chord editor. Each in-process add-on can be run separately with `pnpm --filter @addons/<name> serve`.
 

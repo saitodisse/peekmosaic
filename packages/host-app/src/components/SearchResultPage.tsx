@@ -4,6 +4,9 @@ import { requestContentView, type ContentViewProvider, type ContentViewResult } 
 import { requestContentEditor, supportsContentEditor, type ContentEditorProvider } from '../content-editor';
 import type { AddonInstance } from '@addons-poc/protocol';
 import { AddonControlPanel } from './AddonControlPanel';
+import { ArtistRelations } from './ArtistRelations';
+import { ChartPopularity } from './ChartPopularity';
+import { FavoriteButton } from './FavoriteButton';
 import { RenderedHtmlView } from './RenderedHtmlView';
 import { renderedHtml } from '../tab-view';
 import { useAddonTab } from './useAddonTab';
@@ -30,6 +33,7 @@ interface SearchResultPageProps {
   /** Optional provider of an editing view for this result. */
   editorProvider?: ContentEditorProvider;
   onBackToResults?: () => void;
+  onArtistSearch?: (artist: string) => void;
   previousResultUrl?: string | null;
   nextResultUrl?: string | null;
 }
@@ -106,7 +110,7 @@ function LoadingState({ title }: { title: string }) {
   );
 }
 
-export function SearchResultPage({ contentUrl, result, ready, viewProvider, viewAddon, editorProvider, onBackToResults, previousResultUrl, nextResultUrl, fetchResource = fetch }: SearchResultPageProps) {
+export function SearchResultPage({ contentUrl, result, ready, viewProvider, viewAddon, editorProvider, onBackToResults, onArtistSearch, previousResultUrl, nextResultUrl, fetchResource = fetch }: SearchResultPageProps) {
   const [details, setDetails] = useState<SearchResultDetails | null>(null);
   const [originalText, setOriginalText] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -174,6 +178,8 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
   const responseItems = controller.response?.items;
   const responseSource = responseItems?.find((item) => item.label === 'Source')?.value;
   const playableVersion = details?.body.playableVersion;
+  const statistics = playableVersion && typeof playableVersion === 'object' && 'statistics' in playableVersion
+    ? playableVersion.statistics : undefined;
   const declaredKey = playableVersion && typeof playableVersion === 'object' && 'key' in playableVersion
     ? textValue(playableVersion.key) : undefined;
   const responseKey = declaredKey && responseSource === contentUrl?.replace(/\/content\.txt(?=$|[?#])/u, '/content.json')
@@ -336,6 +342,10 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
   }
 
   const data = details?.body;
+  const relationsUrl = httpUrl(data?.artistRelationsUrl);
+  const artistRelations = relationsUrl && contentUrl && new URL(relationsUrl).origin === new URL(contentUrl).origin
+    ? <ArtistRelations key={relationsUrl} url={relationsUrl} fetchResource={fetchResource} onArtistSearch={onArtistSearch} />
+    : null;
   const title = plainTextValue(data?.displaytitle) ?? plainTextValue(data?.title) ?? plainTextValue(data?.id) ?? result?.name ?? 'Article';
   const renderedTitle = (editing ? editorView?.title : renderedView?.title) ?? result?.name ?? title;
   const description = textValue(data?.description) ?? result?.description;
@@ -360,6 +370,8 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
   const language = textValue(data?.lang);
   const direction = data?.dir === 'rtl' ? 'rtl' : 'ltr';
   const hasFallbackContent = !loading && !error && !data && fallbackContent !== null;
+  const showReadingStatus = Boolean(readingStatusTarget && renderedView && hasPrimaryControls);
+  const favoriteButton = contentUrl ? <FavoriteButton key={contentUrl} url={contentUrl} title={renderedTitle} /> : null;
 
   useLayoutEffect(() => {
     if (!ready || loading || !contentUrl || !renderedView || scrolledContentUrlRef.current === contentUrl) return;
@@ -391,13 +403,14 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
       lang={language}
       dir={direction}
     >
-      {readingStatusTarget && !loading && !error && renderedView && hasPrimaryControls && createPortal(
+      {readingStatusTarget && !loading && !error && showReadingStatus && createPortal(
         <div className="host-reading-status" aria-label="Reading settings">
           <span className="host-reading-status-title">{renderedTitle}</span>
           {responseKey && <span className="host-reading-status-item">
             <span>Key</span>
             <output key={`key-${responseKey}`} className="host-reading-status-value">{responseKey}</output>
           </span>}
+          {favoriteButton}
         </div>, readingStatusTarget,
       )}
       <a
@@ -425,8 +438,12 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
         <div className={`host-rendered-result${!editing && viewAddon?.ui ? compactControls ? ' is-controls-collapsed' : ' has-panel' : ''}`}>
           <article className="host-article-card">
             <header ref={renderedHeaderRef} className="host-article-header host-rendered-header">
-              <h1>{renderedTitle}</h1>
+              <div className="host-rendered-heading">
+                <h1>{renderedTitle}</h1>
+                <ChartPopularity statistics={statistics} />
+              </div>
               <div className="host-rendered-header-actions">
+                {!showReadingStatus && favoriteButton}
                 {externalLinks.map((link) => (
                   <a key={link.url} className="host-rendered-external-link" href={link.url} target="_blank" rel="noopener noreferrer">{link.label} ↗</a>
                 ))}
@@ -457,6 +474,7 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
               {!editing && compactControls && viewAddon?.ui && <AddonControlPanel addon={viewAddon} controller={controller} reading compact onToggleExpanded={() => setControlsExpanded(true)} />}
               </div>
             </header>
+            {!editing && artistRelations}
             <section className="host-article-section">
               {editing
                 ? editorView ? <RenderedHtmlView html={editorView.html} /> : <p role="status">{editorLoading ? 'Opening editor…' : 'Editor unavailable.'}</p>
@@ -487,6 +505,8 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
           <header className="host-article-header">
             <span className="host-article-kicker">{textValue(data.source?.name) ?? 'Content'}</span>
             <h1>{title}</h1>
+            <ChartPopularity statistics={statistics} />
+            {favoriteButton}
             {description && <p className="host-article-description">{description}</p>}
             {originalArticleUrl && (
               <a className="host-article-original-link" href={originalArticleUrl} target="_blank" rel="noreferrer">
@@ -494,6 +514,7 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
               </a>
             )}
           </header>
+          {artistRelations}
 
           {contentText && (
             <section className="host-article-section" aria-label="Content">
@@ -517,6 +538,7 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
           <header className="host-article-header">
             <span className="host-article-kicker">Compatible content</span>
             <h1>{result?.name ?? title}</h1>
+            {favoriteButton}
             {description && <p className="host-article-description">{description}</p>}
             <a className="host-article-original-link" href={contentUrl ?? '#'} target="_blank" rel="noreferrer">
               Open add-on content ↗

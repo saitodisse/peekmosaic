@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AddonInstance } from '@addons-poc/protocol';
 import { readingSections } from '../tab-view';
+import { AddonArchiveInput } from './AddonArchiveInput';
 import type { AddonTabController } from './useAddonTab';
 
 const MAX_TEXT_FILE_BYTES = 64 * 1024;
@@ -34,6 +35,7 @@ export function AddonControlPanel({ addon, controller, title, reading, compact =
   // The result page already holds the content, so the source controls stay out.
   const readingControls = reading ? readingSections(sections) : sections;
   const visibleSections = compact ? [] : readingControls;
+  const fileActions = new Set(tab.fields?.map((field) => field.fileAction));
 
   return (
     <aside className={`host-tab-panel${compact ? ' is-compact' : ''}`} aria-label={title ?? `Controls for ${tab.title}`}>
@@ -107,6 +109,10 @@ export function AddonControlPanel({ addon, controller, title, reading, compact =
               );
             }
 
+            if (field.type === 'file' && field.fileAction) {
+              return <AddonArchiveInput key={field.id} field={field} controller={controller} />;
+            }
+
             if (field.type === 'file') {
               return (
                 <label key={field.id} className="host-tab-panel-field">
@@ -164,9 +170,9 @@ export function AddonControlPanel({ addon, controller, title, reading, compact =
             );
           })}
 
-          {section.actions.length > 0 && (
+          {section.actions.some((action) => !fileActions.has(action.id)) && (
             <div className="host-tab-panel-actions">
-              {section.actions.map((action) => (
+              {section.actions.filter((action) => !fileActions.has(action.id)).map((action) => (
                 <button
                   key={action.id}
                   type="button"

@@ -1,5 +1,6 @@
 import { defineAddonManifest } from '@addons-poc/protocol';
-import { CATALOGS } from './data/charts.js';
+import { CATALOGS } from './data/catalogs.js';
+import { ARTIST_EXPORT_ACTIONS } from './artist-export.js';
 
 /**
  * Chord-chart catalogue manifest.
@@ -96,9 +97,12 @@ const chartSourceSchema = object('Origin and licence of the delivered chart.', '
   provider: string('Add-on that answered the request.'),
   origin: string('HTTP origin of the add-on.', 'public', 'uri'),
   url: string('Exact content URL.', 'public', 'uri'),
+  catalogueUrl: string('Archive or catalogue used to import the chart.', 'public', 'uri'),
+  canonicalUrl: string('Canonical URL declared on the source page.', 'public', 'uri'),
+  imageUrl: string('Image URL declared on the source page.', 'public', 'uri'),
   license: string('Licence declared for the text.'),
-  notice: string('Provenance notice for the demo data set.'),
-}, ['name', 'provider', 'origin', 'url', 'license', 'notice']);
+  notice: string('Optional provenance notice.'),
+}, ['name', 'provider', 'origin', 'url']);
 
 const chartRecordSchema = object('Chart record, in the vocabulary of the AC archive.', 'public', {
   id: string('Record identifier.'),
@@ -122,11 +126,12 @@ const chartJsonSchema = object('Structured chart payload consumed by a renderer.
   title: string('Chart title.'),
   description: string('Artist, key, and tempo in one line.'),
   extract: string('Notation summary in one sentence.'),
+  artistRelationsUrl: string('Optional device-local artist profile and relationship URL.', 'public', 'uri'),
   musicalWork: object('Work the chart belongs to.', 'public', {
     title: string('Work title.'),
     artistSlug: string('Artist slug.'),
     artistName: string('Artist display name.'),
-    artistImage: string('Generated demo portrait URL for the artist.', 'public', 'uri'),
+    artistImage: string('Portrait URL for the artist.', 'public', 'uri'),
     albumTitle: string('Album that first released this song.'),
     firstReleasedYear: integer('Year the album was first released.'),
     composers: array('Composers credited for the work.', 'public', string('Composer name.')),
@@ -144,9 +149,10 @@ const chartJsonSchema = object('Structured chart payload consumed by a renderer.
     tempo: integer('Suggested tempo in beats per minute.'),
     time: string('Time signature.'),
     difficulty: integer('Difficulty from 1 to 5.'),
-    statistics: object('Source statistics at collection time.', 'public', {
+    statistics: object('Recorded views and list appearances with an optional catalogue comparison.', 'public', {
       allTimeViews: integer('Views reported by the source.'),
       listAppearances: integer('Appearances in source lists.'),
+      catalogueMaxViews: integer('Highest recorded view count across the full catalogue.'),
     }),
   }, ['id', 'key']),
   notation: object('Notation rules of the delivered text.', 'public', {
@@ -200,14 +206,14 @@ const trafficEntrySchema = object('One HTTP exchange observed by the server.', '
 export const manifest = defineAddonManifest({
   entrypoint: './bundle.js',
   id: 'chord-catalog',
-  version: '1.2.2',
+  version: '1.3.0',
   name: 'Chord Chart Catalogue',
   description: 'Lists, searches and imports chord charts, including locally decrypted private archives.',
   author: 'AC Team',
   license: 'MIT',
   ui: {
     title: '🎼 Chord charts',
-    body: 'A catalogue of demo and downloaded chord charts available on this device. Encrypted archives are decrypted in this browser with the selected local certificate; its private key and passphrase are not saved. Use the global search to find a chart by title, artist, key, tag, chord, or lyric.',
+    body: 'A catalogue of imported chord charts available on this device. Encrypted archives are decrypted in this browser with the selected local certificate; its private key and passphrase are not saved. Use the global search to find a chart by title, artist, key, tag, chord, or lyric.',
   },
   resources: [
     { name: 'catalog', types: ['chart'], idPrefixes: [] },
@@ -228,23 +234,64 @@ export const manifest = defineAddonManifest({
         receives: payload('Requested resource.', object('Resource request.', 'public', { url: string('Absolute resource URL.', 'public', 'uri') }, ['url'])),
         returns: payload('Local response or nothing for unrelated URLs.', object('Resource response.', 'public', { status: integer('HTTP status.'), contentType: string('Media type.'), body: string('Serialized response body.') })),
       }],
+    }, {
+      id: 'peekmosaic.search-order', role: 'provides', version: '1.0.0',
+      description: 'Offers optional search orders and shares one preference across searches on this device.',
+      methods: [
+        { id: 'options', description: 'Lists available search orders.',
+          returns: payload('Search order options.', array('Selectable orders.', 'public', object('Search order option.', 'public', {
+            id: string('Order identifier.'),
+            label: string('Display label.'),
+          }, ['id', 'label']))) },
+        { id: 'get', description: 'Returns the selected search order or an empty string for the default.',
+          returns: payload('Selected order.', string('Search order identifier.')) },
+        { id: 'set', description: 'Persists the selected search order.',
+          receives: payload('Selected order.', string('Search order identifier or an empty string for the default.')) },
+      ],
+    }, {
+      id: 'peekmosaic.artist-recommendations', role: 'provides', version: '1.0.0',
+      description: 'Reads imported artist relationships and ratings from this device.',
+      methods: [
+        { id: 'directory', description: 'Lists the artists and editorial ratings in the imported dataset.',
+          returns: payload('Artist directory.', array('Artist summaries.', 'public', object('Artist summary.', 'public', {
+            slug: string('Stable artist identifier.'),
+            name: string('Artist display name.'),
+            ratings: object('Optional category ratings by model, from 0 to 3.', 'public', {}),
+          }, ['slug', 'name']))) },
+        { id: 'profile', description: 'Reads the relationships for one artist.',
+          receives: payload('Artist identifier.', string('Stable artist identifier.')),
+          returns: payload('Artist profile if found.', object('Artist and its paired discovery, co-listening and documented evidence.', 'public', {
+            slug: string('Stable artist identifier.'),
+            name: string('Artist display name.'),
+            listeners: integer('Unique listeners in the audience sample.'),
+            audience: object('Audience source, dates and minimum sample sizes.', 'public', {}),
+            related: array('Paired relationships.', 'public', object('Relationship with another artist.', 'public', {})),
+          }, ['slug', 'name', 'related'])) },
+      ],
     }],
     ui: {
       fields: [
         { id: 'sources', label: 'Source catalogue URLs (one per line)', description: 'Source Catalog roots or ZIP or TAR.ZST archives to refresh manually.', schema: string('One HTTP(S) catalogue root or ZIP, TAR.ZST or encrypted TAR.ZST URL per line.') },
         { id: 'deleteSource', label: 'Downloaded source to delete (URL)', description: 'Source snapshot explicitly selected for deletion.', schema: string('Catalogue root or ZIP, TAR.ZST or encrypted TAR.ZST URL to remove.') },
-        { id: 'archive', label: 'Local archive (.zip, .tar.zst, .tzst)', description: 'An archive selected on this device and read only during import.', schema: string('Temporary local archive reference.', 'personal') },
+        { id: 'archives', label: 'Archive files (.zip, .tar.zst, .tzst)', description: 'Local archives selected on this device and read only during import.', schema: string('JSON list of file names and temporary object URLs.', 'personal') },
+        { id: 'artistRelations', label: 'Relationship dataset (artist-relations.v1.json)', description: 'Imports a relationship dataset independently of the chart archives.', schema: string('JSON with one file name and a temporary object URL.', 'personal') },
         { id: 'certificate', label: 'Local private certificate (.cvcert)', description: 'Encrypted local certificate read into memory only when updating an encrypted source.', schema: string('Certificate JSON held in the current page only.', 'secret') },
         { id: 'certificatePassphrase', label: 'Certificate passphrase', description: 'Passphrase used to unlock the local certificate in the browser only.', schema: string('Local passphrase held in the current page only.', 'secret') },
       ],
       actions: [
-        { id: 'update', label: 'Update catalogue', description: 'Downloads snapshots and decrypts encrypted archives in the browser, retaining previous data on failure.', receives: ['sources', 'archive', 'certificate', 'certificatePassphrase'], returns: payload('Import report.', object('Tab response.', 'public', {})) },
+        { id: 'import-local', label: 'Import local archives', description: 'Imports local archives sequentially and reports the result for each file.', receives: ['archives'], returns: payload('Import report.', object('Tab response.', 'public', {})) },
+        { id: 'import-artist-relations', label: 'Import artist relationships', description: 'Replaces the relationship dataset stored on this device.', receives: ['artistRelations'], returns: payload('Import report.', object('Tab response.', 'public', {})) },
+        { id: 'update', label: 'Update catalogue', description: 'Downloads snapshots and decrypts encrypted archives in the browser, retaining previous data on failure.', receives: ['sources', 'certificate', 'certificatePassphrase'], returns: payload('Import report.', object('Tab response.', 'public', {})) },
         { id: 'delete', label: 'Delete downloaded source', description: 'Deletes the selected downloaded snapshot from this device.', receives: ['deleteSource'], returns: payload('Deletion report.', object('Tab response.', 'public', {})) },
+        ...ARTIST_EXPORT_ACTIONS.map((action) => ({
+          ...action, receives: [], returns: payload('Clipboard copy report.', object('Tab response.', 'public', {})),
+        })),
       ],
     },
     state: [
-      { id: 'source-library', description: 'Browser IndexedDB source snapshots.', key: 'addons:state:chord-catalog:v1', operations: ['read', 'write', 'remove', 'list', 'clear'], value: payload('Source snapshots.', object('Downloaded charts.', 'public', {})), retention: 'Until explicitly deleted or browser site data is cleared.', deletionTrigger: 'Delete downloaded source action or browser site data removal.' },
+      { id: 'source-library', description: 'Browser IndexedDB source snapshots and optional artist relationship dataset.', key: 'addons:state:chord-catalog:v1', operations: ['read', 'write', 'remove', 'list', 'clear'], value: payload('Source snapshots and relationships.', object('Downloaded charts and imported artist profiles.', 'public', {})), retention: 'Until explicitly deleted, replaced or browser site data is cleared.', deletionTrigger: 'Delete downloaded source action for charts, replacement import for relationships, or browser site data removal.' },
       { id: 'source-settings', description: 'Source URLs stored in browser localStorage.', key: 'addons:state:chord-catalog:settings:v1', operations: ['read', 'write', 'remove'], value: payload('Source settings.', object('Configuration.', 'public', {})), retention: 'Until browser site data is cleared.', deletionTrigger: 'Factory reset or browser site data removal.' },
+      { id: 'search-order', description: 'Global search order stored in browser localStorage.', key: 'addons:state:chord-catalog:search-order:v1', operations: ['read', 'write', 'remove'], value: payload('Search order.', string('Search order identifier.')), retention: 'Until changed or browser site data is cleared.', deletionTrigger: 'Default order, factory reset or browser site data removal.' },
     ],
     http: [
       { id: 'source-pull', direction: 'outgoing', method: 'GET', origin: 'https://{configured-source}', path: '/{catalogueRoot}/{file}', purpose: 'Downloads configured Source Catalog documents or encrypted archives; a certificate token is sent in an Authorization header and the archive is decrypted locally.', returns: payload('Source bytes.', string('Static source document or encrypted archive.')) },
@@ -290,17 +337,6 @@ export const manifest = defineAddonManifest({
         returns: payload('Available versions and their links.', object('Object with texts.', 'public', {
           texts: array('Available versions.', 'public', textOptionSchema),
         }, ['texts'])),
-      },
-      {
-        id: 'artist-image',
-        direction: 'incoming',
-        method: 'GET',
-        path: '/artists/{artistSlug}.png',
-        purpose: 'Delivers one generated demo artist portrait for catalogue rows.',
-        receives: incoming('Requested artist portrait.', {
-          artistSlug: string('Artist slug used to select a local image file.'),
-        }, ['artistSlug']),
-        returns: payload('PNG portrait bytes served as image/png.', string('Binary image response body.')),
       },
       {
         id: 'content',

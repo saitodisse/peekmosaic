@@ -8,16 +8,25 @@ test('release names only accept stable semantic versions', () => {
   for (const version of ['1.2.3-rc.1', '../1.2.3', '01.2.3', '1.2']) assert.throws(() => releaseInfo(version));
 });
 
-test('catalogue serves plain chart text with the Node response interface', async () => {
-  const headers = {};
-  let body;
-  const response = {
-    setHeader(name, value) { headers[name] = value; },
-    send(value) { body = value; },
-    status(code) { throw new Error(`Unexpected status ${code}`); },
-    json(value) { throw new Error(`Unexpected JSON ${JSON.stringify(value)}`); },
+test('deployed catalogue starts empty and rejects old bundled charts', async () => {
+  const request = async (path) => {
+    let status = 200;
+    let body;
+    const response = {
+      setHeader() {},
+      status(code) { status = code; return this; },
+      json(value) { body = value; },
+    };
+    await handler({ method: 'GET', url: `/chord-catalog/${path}`, headers: { host: 'example.test' } }, response);
+    return { status, body };
   };
-  await handler({ method: 'GET', url: '/chord-catalog/text/chart/static-and-rain/content.txt', headers: { host: 'example.test' } }, response);
-  assert.match(headers['Content-Type'], /^text\/plain/);
-  assert.ok(body.includes('[Intro]'));
+  for (const path of ['catalog/chart/recent.json', 'search/chart/vela%20nova.json']) {
+    const { status, body } = await request(path);
+    assert.equal(status, 200);
+    assert.deepEqual(body.metas, []);
+    assert.equal(body.pagination.total, 0);
+  }
+  const { status, body } = await request('text/chart/static-and-rain/content.txt');
+  assert.equal(status, 404);
+  assert.equal(body.error, 'CHART_NOT_FOUND');
 });

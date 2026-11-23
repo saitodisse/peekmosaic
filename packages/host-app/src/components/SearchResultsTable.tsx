@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { truncateDescription } from '../search';
-import type { SearchProviderError, SearchResultRow } from '../search';
+import type { SearchOrderOption, SearchProviderError, SearchResultRow } from '../search';
 import { href, navigate, resultRoute } from '../router';
 
 interface SearchResultsTableProps {
@@ -15,6 +15,9 @@ interface SearchResultsTableProps {
   page: number;
   pageSize: number;
   pageSizes: readonly number[];
+  searchOrder?: string;
+  searchOrderOptions?: readonly SearchOrderOption[];
+  onSearchOrderChange?: (order: string) => void;
   keyboardActive?: boolean;
   canGoPrevious: boolean;
   canGoNext: boolean;
@@ -28,7 +31,7 @@ interface SearchResultsTableProps {
   focusResultUrl?: string | null;
   onResultFocused?: () => void;
 }
-export function SearchResultsTable({ query, artistFilter, browsing = false, results, errors, loading, providerCount, page, pageSize, pageSizes, keyboardActive = false, canGoPrevious, canGoNext, onPageChange, onLastPage, onPreviousPage, onNextPage, onPageSizeChange, onClearSearch, onArtistSearch, focusResultUrl, onResultFocused }: SearchResultsTableProps) {
+export function SearchResultsTable({ query, artistFilter, browsing = false, results, errors, loading, providerCount, page, pageSize, pageSizes, searchOrder, searchOrderOptions, onSearchOrderChange, keyboardActive = false, canGoPrevious, canGoNext, onPageChange, onLastPage, onPreviousPage, onNextPage, onPageSizeChange, onClearSearch, onArtistSearch, focusResultUrl, onResultFocused }: SearchResultsTableProps) {
   const resultRowsRef = useRef(new Map<number, HTMLTableRowElement>());
   const pendingFocusRef = useRef<{ page: number; edge: 'first' | 'last'; sawLoading: boolean } | null>(null);
   const firstRowOnPageChangeRef = useRef<{ page: number; results: SearchResultRow[] } | null>(null);
@@ -85,6 +88,7 @@ export function SearchResultsTable({ query, artistFilter, browsing = false, resu
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('.host-artist-sidebar')) return;
       const searchField = target?.closest<HTMLInputElement>('#global-addon-search');
 
       if (event.key === 'Escape') {
@@ -210,10 +214,19 @@ export function SearchResultsTable({ query, artistFilter, browsing = false, resu
           {listsSomething && <p className="host-search-keyboard-hint">Use ↑/↓ to move, ←/→ for previous/next page, Home/End for first/last page, Page Up/Page Down to jump 5 pages, Enter to open, and Esc to clear the search.</p>}
         </div>
         {listsSomething && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span role="status" style={{ color: loading ? '#fbbf24' : '#94a3b8', fontSize: 12 }}>
               {loading ? (query ? 'Searching…' : 'Loading…') : `${results.length} item(s) on page ${page}`}
             </span>
+            {Boolean(searchOrderOptions?.length) && (
+              <label className="host-search-page-size">
+                <span>Sort by</span>
+                <select value={searchOrder} onChange={(event) => onSearchOrderChange?.(event.target.value)}>
+                  <option value="">{artistFilter ? 'Song title' : browsing ? 'Recently updated' : 'Relevance'}</option>
+                  {searchOrderOptions?.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+                </select>
+              </label>
+            )}
             <label className="host-search-page-size">
               <span>Items per page</span>
               <select aria-label="Items per page" value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>

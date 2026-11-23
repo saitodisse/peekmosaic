@@ -6,6 +6,19 @@ export const MIN_SEARCH_LIMIT = 1;
 export const MAX_SEARCH_LIMIT = 500;
 export const MAX_DESCRIPTION_LENGTH = 140;
 
+export const SEARCH_ORDER_SERVICE = 'peekmosaic.search-order';
+
+export interface SearchOrderOption {
+  id: string;
+  label: string;
+}
+
+export interface SearchOrderProvider {
+  options(): readonly SearchOrderOption[];
+  get(): string;
+  set(order: string): void;
+}
+
 export type SearchLimitValue = number | '';
 
 export interface SearchResultDisplayField {

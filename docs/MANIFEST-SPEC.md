@@ -121,7 +121,14 @@ to organise a control panel; a host that ignores it keeps a single list.
 A field may declare the kind of control it wants: `text`, `textarea`, `url`,
 `range`, `toggle`, `color`, or `file`, with optional `min`, `max`, and `step`
 for a range and `accept` for a file input. A file control reads a bounded text
-file as a string for the action. These are runtime `AddonTabField` controls,
+file as a string for the action by default. A file field with `fileAction` allows
+multiple files by default and triggers the named action on selection or drop.
+Set the runtime field's `fileMultiple` to `false` for a single file. That action
+declares the field in `receives` and gets a transient JSON list of
+`{ name, url }` records. The host revokes the object URLs after the action
+settles. An executable tab can list its settings group names in
+`settingsGroups`; by default the host uses the group named `Settings`.
+These are runtime `AddonTabField` and `AddonTab` controls,
 which an in-process add-on returns from `createTab`; they are not extra manifest
 fields. A runtime field may set `sensitive: true`; the host omits that value
 from tab persistence and clears it after an action receives it. The value still

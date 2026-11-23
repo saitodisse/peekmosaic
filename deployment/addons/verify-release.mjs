@@ -18,8 +18,13 @@ for (const name of ['chord-catalog', 'chord-viewer', 'storage-local', 'chord-edi
   console.log(`${name} ${manifest.version}: manifest and bundle OK`);
 }
 const catalog = await (await get('/chord-catalog/catalog/chart/recent.json?limit=1')).json();
-if (!catalog.metas?.[0]?.url?.startsWith(`${info.origin}/chord-catalog/`)) throw new Error('Catalogue did not return a release-local chart URL.');
-const chartUrl = new URL(catalog.metas[0].url);
-if (!(await (await get(chartUrl.pathname)).text()).trim()) throw new Error('Chart content is empty.');
+if (!Array.isArray(catalog.metas)) throw new Error('Catalogue did not return a list of charts.');
+if (catalog.metas.length > 0) {
+  if (!catalog.metas[0]?.url?.startsWith(`${info.origin}/chord-catalog/`)) throw new Error('Catalogue did not return a release-local chart URL.');
+  const chartUrl = new URL(catalog.metas[0].url);
+  if (!(await (await get(chartUrl.pathname)).text()).trim()) throw new Error('Chart content is empty.');
+} else if (catalog.pagination?.total !== 0) {
+  throw new Error('Empty catalogue reported an unexpected total.');
+}
 await get('/chord-editor/monaco/vs/loader.js');
-console.log('Catalogue content and Monaco loader OK');
+console.log('Catalogue route and Monaco loader OK');

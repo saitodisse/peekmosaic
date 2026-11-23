@@ -5,6 +5,44 @@ import { toMeta } from './payloads-core.js';
 import { createMetadataSearchEntry } from './catalog.js';
 
 describe('persistent source library', () => {
+  it('imports relationships with a source and overwrites them independently of charts', async () => {
+    const indexedDB = new IDBFactory();
+    const store = createLibraryStore(indexedDB);
+    const profiles = [{ slug: 'artist', name: 'Artist', ratings: { jev: { festa: 3 } }, related: [] }];
+    await store.put({ root: 'a', charts: [{ id: 'song', text: 'C' }], artistRelations: profiles });
+    await store.put({ root: 'b', charts: [] });
+    const reopened = createLibraryStore(indexedDB);
+    expect(await reopened.hasArtistRelations('artist')).toBe(true);
+    expect(await reopened.getArtistRelations('artist')).toEqual(profiles[0]);
+    expect(await reopened.listArtistSummaries()).toEqual([{ slug: 'artist', name: 'Artist', ratings: { jev: { festa: 3 } } }]);
+    expect((await reopened.list())[0]).not.toHaveProperty('artistRelations');
+    await reopened.putArtistRelations([{ slug: 'other', name: 'Other', related: [] }]);
+    expect(await store.hasArtistRelations('artist')).toBe(false);
+    expect((await store.listArtistSummaries()).map(({ slug }) => slug)).toEqual(['other']);
+    expect(await store.getChartsByIds(['song'])).toEqual([{ id: 'song', text: 'C' }]);
+    await reopened.clear();
+    expect(await store.hasArtistRelations('other')).toBe(false);
+    expect(await store.listArtistSummaries()).toEqual([]);
+  });
+
+  it('builds the artist directory from profiles already stored in version 7', async () => {
+    const indexedDB = new IDBFactory();
+    const profile = { slug: 'artist', name: 'Artist', ratings: { jev: { festa: 3 } }, related: [] };
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.open(LIBRARY_DATABASE, 7);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        for (const name of ['sources', 'chunks', 'search', 'locations']) db.createObjectStore(name);
+        db.createObjectStore('artistRelations', { keyPath: 'slug' }).put(profile);
+      };
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => { request.result.close(); resolve(); };
+    });
+    const migrated = createLibraryStore(indexedDB);
+    expect(await migrated.getArtistRelations('artist')).toEqual(profile);
+    expect(await migrated.listArtistSummaries()).toEqual([{ slug: 'artist', name: 'Artist', ratings: profile.ratings }]);
+  });
+
   it('reads only the blocks containing requested charts, with ordered results and no full scan', async () => {
     const indexedDB = new IDBFactory();
     const store = createLibraryStore(indexedDB);
@@ -57,22 +95,29 @@ describe('persistent source library', () => {
     expect(await reopened.searchEntries()).toEqual([]);
   });
 
-  it.each([3, 4])('migrates version %i blocks without losing content or indexed lookup', async (version) => {
+  it.each([3, 4, 5])('migrates version %i blocks and indexes existing statistics', async (version) => {
     const indexedDB = new IDBFactory();
-    const chart = { id: 'old', title: 'A Noite', artist: { name: 'Tiê' }, text: 'Original lyrics' };
+    const chart = { id: 'old', title: 'A Noite', artist: { name: 'Tiê' }, text: 'Original lyrics',
+      statistics: { allTimeViews: 42, listAppearances: 3 } };
     await new Promise((resolve, reject) => {
       const request = indexedDB.open(LIBRARY_DATABASE, version);
       request.onupgradeneeded = () => {
         const db = request.result;
         db.createObjectStore('sources', { keyPath: 'root' });
         db.createObjectStore('chunks', { keyPath: ['root', 'index'] }).createIndex('root', 'root');
-        if (version === 4) db.createObjectStore('search', { keyPath: ['root', 'index'] }).createIndex('root', 'root');
+        if (version >= 4) db.createObjectStore('search', { keyPath: ['root', 'index'] }).createIndex('root', 'root');
+        if (version === 5) {
+          const locations = db.createObjectStore('locations', { keyPath: ['root', 'index'] });
+          locations.createIndex('root', 'root');
+          locations.createIndex('ids', 'ids', { multiEntry: true });
+        }
       };
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         const db = request.result;
-        const tx = db.transaction(version === 4 ? ['sources', 'chunks', 'search'] : ['sources', 'chunks'], 'readwrite');
-        if (version === 4) tx.objectStore('search').put({ root: 'old', index: 0, entries: [createMetadataSearchEntry(chart)] });
+        const tx = db.transaction(Array.from(db.objectStoreNames), 'readwrite');
+        if (version >= 4) tx.objectStore('search').put({ root: 'old', index: 0, entries: [createMetadataSearchEntry({ ...chart, statistics: undefined })] });
+        if (version === 5) tx.objectStore('locations').put({ root: 'old', index: 0, ids: [chart.id] });
         tx.objectStore('sources').put({ root: 'old', chartCount: 1, chunkCount: 1 });
         tx.objectStore('chunks').put({ root: 'old', index: 0, charts: [chart] });
         tx.oncomplete = () => { db.close(); resolve(); };
@@ -80,6 +125,7 @@ describe('persistent source library', () => {
     });
     const store = createLibraryStore(indexedDB);
     expect((await store.searchEntries()).map(e => e.title)).toEqual(['A Noite']);
+    expect((await store.searchEntries())[0].statistics).toEqual(chart.statistics);
     expect(await store.getChartsByIds(['old'])).toEqual([chart]);
     await store.remove('old');
     expect(await store.searchEntries()).toEqual([]);
@@ -103,7 +149,12 @@ describe('persistent source library', () => {
 
   it('retains snapshots saved before block storage was introduced', async () => {
     const indexedDB = new IDBFactory();
-    const original = { root: 'https://example.test/old/', charts: [{ id: 'old', text: 'Dm' }] };
+    const root = 'https://example.test/old/';
+    const chart = {
+      id: 'old', text: 'Dm', sourceUrl: root,
+      scraperMetadata: { page: { canonicalUrl: '/canonical/', imageUrl: '/cover.jpg' } },
+    };
+    const original = { root, charts: [chart] };
     await new Promise((resolve, reject) => {
       const request = indexedDB.open(LIBRARY_DATABASE, 1);
       request.onupgradeneeded = () => request.result.createObjectStore('sources', { keyPath: 'root' });
@@ -115,8 +166,12 @@ describe('persistent source library', () => {
       };
     });
     const store = createLibraryStore(indexedDB);
-    expect(await store.list()).toEqual([original]);
-    expect(await store.getChartsByIds(['old'])).toEqual(original.charts);
+    const migrated = {
+      id: 'old', text: 'Dm', sourceUrl: root, visits: 0,
+      canonicalUrl: 'https://example.test/canonical/', imageUrl: 'https://example.test/cover.jpg',
+    };
+    expect(await store.list()).toEqual([{ root, charts: [migrated] }]);
+    expect(await store.getChartsByIds(['old'])).toEqual([migrated]);
     expect((await store.searchEntries()).map(e => e.id)).toEqual(['old']);
     await store.put({ root: original.root, charts: [] });
     expect(await store.list()).toEqual([{ root: original.root, charts: [] }]);

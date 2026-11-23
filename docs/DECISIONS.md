@@ -455,8 +455,7 @@ Two behaviours are deliberately different from the reference:
 - charts render as HTML produced by that component; the host inserts the view
   and keeps the text body as the fallback.
 
-The demo catalogue contains original content written for this POC. The AC12
-archive is licensed material of another project and is not copied here.
+The catalogue starts empty and loads sources configured by the person using it.
 
 ### Technical consequences
 

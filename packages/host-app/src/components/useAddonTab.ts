@@ -17,7 +17,7 @@ export interface AddonTabController {
   setValue: (id: string, value: string) => void;
   response: AddonTabResult | null;
   runningAction: string | null;
-  run: (actionId: string) => Promise<void>;
+  run: (actionId: string, transientValues?: Record<string, string>) => Promise<void>;
   sections: Array<ControlSection<AddonTabAction>>;
   /** True while a storage provider restores or saves the tab. */
   ready: boolean;
@@ -25,7 +25,7 @@ export interface AddonTabController {
 
 export interface AddonTabOptions {
   /** Called after every response, which is how the result page follows the controls. */
-  onResponse?: (response: AddonTabResult) => void;
+  onResponse?: (response: AddonTabResult, actionId: string) => void;
 }
 
 /**
@@ -39,6 +39,7 @@ export function useAddonTab(addon: AddonInstance | null, options: AddonTabOption
   const [values, setValues] = useState<Record<string, string>>({});
   const [response, setResponse] = useState<AddonTabResult | null>(null);
   const [runningAction, setRunningAction] = useState<string | null>(null);
+  const activeRuns = useRef(0);
   const [ready, setReady] = useState(!tab?.persistence);
   const fileUrlsRef = useRef(new Map<string, string>());
   const renderedSignatureRef = useRef<string | null>(null);
@@ -49,10 +50,10 @@ export function useAddonTab(addon: AddonInstance | null, options: AddonTabOption
   const onResponseRef = useRef(options.onResponse);
   onResponseRef.current = options.onResponse;
 
-  const publish = useCallback((next: AddonTabResult) => {
+  const publish = useCallback((next: AddonTabResult, actionId: string) => {
     setResponse(next);
     setValues((current) => applyResponseValues(current, next));
-    onResponseRef.current?.(next);
+    onResponseRef.current?.(next, actionId);
   }, []);
 
   useEffect(() => {
@@ -119,30 +120,32 @@ export function useAddonTab(addon: AddonInstance | null, options: AddonTabOption
     };
   }, [tab]);
 
-  const run = useCallback(async (actionId: string) => {
+  const run = useCallback(async (actionId: string, transientValues?: Record<string, string>) => {
     if (!addon || !tab) return;
+    if (activeRuns.current > 0 && (transientValues || !tab.actions?.find((action) => action.id === actionId)?.live)) return;
     if (!tab.run) {
-      publish({ status: 'info', body: 'This add-on does not offer interactive actions.' });
+      publish({ status: 'info', body: 'This add-on does not offer interactive actions.' }, actionId);
       return;
     }
 
-    const input = validateTabActionInput(addon.manifest.contract, actionId, values);
+    const input = validateTabActionInput(addon.manifest.contract, actionId, { ...values, ...transientValues });
     if (!input.valid) {
-      publish({ status: 'error', body: input.errors.join('\n') });
+      publish({ status: 'error', body: input.errors.join('\n') }, actionId);
       return;
     }
 
+    activeRuns.current += 1;
     setRunningAction(actionId);
     try {
       const result = await tab.run(actionId, input.values);
       const output = validateTabResult(result);
       if (!output.valid) {
-        publish({ status: 'error', body: `Response rejected by the contract: ${output.errors.join('\n')}` });
+        publish({ status: 'error', body: `Response rejected by the contract: ${output.errors.join('\n')}` }, actionId);
       } else {
-        publish(result);
+        publish(result, actionId);
       }
     } catch (error) {
-      publish({ status: 'error', body: (error as Error).message || 'The action could not be completed.' });
+      publish({ status: 'error', body: (error as Error).message || 'The action could not be completed.' }, actionId);
     } finally {
       const action = tab.actions?.find((candidate) => candidate.id === actionId);
       const declaredAction = addon.manifest.contract.ui.actions.find((candidate) => candidate.id === actionId);
@@ -156,7 +159,8 @@ export function useAddonTab(addon: AddonInstance | null, options: AddonTabOption
         const sensitiveIds = new Set(sensitive.map((field) => field.id));
         setValues((current) => Object.fromEntries(Object.entries(current).filter(([id, value]) => !sensitiveIds.has(id) || value !== input.values[id])));
       }
-      setRunningAction(null);
+      activeRuns.current -= 1;
+      if (activeRuns.current === 0) setRunningAction(null);
     }
   }, [addon, publish, tab, values]);
 

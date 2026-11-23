@@ -5,13 +5,13 @@ import { catalog, content, contentJson, search, text } from './handlers.js';
 
 const port = Number(process.env.PORT ?? 5295);
 const traffic = createTrafficRecorder({ maxEntries: 100 });
-const artistSlugs = ['clara-fonseca', 'mare-alta', 'the-ridge-line', 'vela-nova'];
-const assets = Object.fromEntries(await Promise.all(artistSlugs.map(async (slug) => [
-  `/artists/${slug}.png`,
-  { body: await readFile(new URL(`../assets/artists/${slug}.png`, import.meta.url)), contentType: 'image/png' },
-])));
-
-assets['/bundle.js'] = { body: await readFile(new URL('../dist/bundle.js', import.meta.url)), contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-store' };
+const assets = {
+  '/bundle.js': {
+    body: await readFile(new URL('../dist/bundle.js', import.meta.url)),
+    contentType: 'text/javascript; charset=utf-8',
+    cacheControl: 'no-store',
+  },
+};
 
 const server = await createAddonServer({
   manifest,

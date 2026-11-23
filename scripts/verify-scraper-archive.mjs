@@ -8,6 +8,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { importSource } from '../packages/addon-chord-catalog/src/source-import.js';
+import { sourcePageUrls } from '../packages/addon-chord-catalog/src/source-page.js';
 
 const archive = resolve(process.argv[2] ?? '../artist-portal-scraper/downloads.tar.zst');
 const directory = await mkdtemp(join(tmpdir(), 'verify-chord-archive-'));
@@ -36,7 +37,13 @@ try {
         assert.ok(chart, `Missing chart: ${path}`);
         assert.equal(chart.text, text.toString('utf8'), `Text differs: ${path}`);
         assert.equal(chart.checksum, createHash('sha256').update(text).digest('hex'));
-        assert.deepEqual(chart.scraperMetadata, metadata, `Metadata differs: ${path}`);
+        const urls = sourcePageUrls(metadata.page, metadata.sourceUrl);
+        assert.equal(chart.canonicalUrl, urls.canonicalUrl, `Canonical URL differs: ${path}`);
+        assert.equal(chart.imageUrl, urls.imageUrl, `Image URL differs: ${path}`);
+        const statistics = Object.fromEntries(['allTimeViews', 'listAppearances']
+          .filter((key) => Number.isSafeInteger(metadata.chart?.statistics?.[key]))
+          .map((key) => [key, metadata.chart.statistics[key]]));
+        assert.deepEqual(chart.statistics ?? {}, statistics, `Statistics differ: ${path}`);
         verified++;
       }
     }

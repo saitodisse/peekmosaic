@@ -23,6 +23,8 @@ interface AddonCardProps {
 }
 
 export function AddonCard({ addon, onResourcesChanged, enabled, onToggle, onRemove, stateDestination, searchLimit, searchLanguage, onSearchLimitChange, onSearchLanguageChange, reviewRequired = false, onAcceptContract }: AddonCardProps) {
+  const settingsGroups = addon.ui?.settingsGroups ?? ['Settings'];
+  const hasSettings = addon.ui?.fields?.some((field) => field.group !== undefined && settingsGroups.includes(field.group));
   const [expanded, setExpanded] = useState(false);
   const toggleAvailable = !reviewRequired && addon.status !== 'error';
   const searchTypes = [...new Set((addon.manifest.contract.resources ?? []).filter((resource) => resource.name === 'search').flatMap((resource) => resource.types))];
@@ -167,7 +169,7 @@ export function AddonCard({ addon, onResourcesChanged, enabled, onToggle, onRemo
           </select>
         </div>
       )}
-      {enabled && !reviewRequired && addon.status === 'ready' && addon.ui?.fields?.some((field) => field.group === 'Settings') && <AddonSettingsPanel addon={addon} onResourcesChanged={onResourcesChanged} />}
+      {enabled && !reviewRequired && addon.status === 'ready' && hasSettings && <AddonSettingsPanel addon={addon} onResourcesChanged={onResourcesChanged} />}
       {expanded && <AddonContractView manifest={addon.manifest} manifestUrl={addon.manifestUrl} stateDestination={stateDestination} />}
       </div>
       {addon.status === 'blocked' && <p role="status" style={{ margin: '12px 0 0', color: '#fbbf24', fontSize: 12 }}>Blocked until a required dependency becomes available{addon.blockReason ? `: ${addon.blockReason}` : '.'}</p>}

@@ -4,6 +4,24 @@ This file describes, in reverse order, how the project evolved. The quick read s
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.20.0] - 2026-11-22
+
+### Added
+
+- Import multiple chart archives by selection or drag and drop, with per-file results and a completion toast. Keep URL and encrypted-key import in its own settings tab.
+- Import optional artist relationships from an archive or a standalone JSON file. Show related artists, measured co-listening, and filterable category rankings ordered by score, with shared positions for ties.
+- Show chart views and a popularity bar relative to the most viewed chart in the catalogue.
+- Save chart favorites locally and export artist lists from the catalogue.
+
+### Changed
+
+- Publish catalogue, viewer, and editor updates as fixed add-on release 1.18.0.
+- Start with an empty catalogue and use imported source metadata for ordering artist results.
+
+### Removed
+
+- Remove bundled sample charts and artwork from the public catalogue.
+
 ## [1.19.5] - 2026-11-13
 
 ### Removed

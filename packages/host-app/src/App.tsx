@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { getInteractionContractFingerprint, validateManifest } from '@addons-poc/protocol';
 import type { AddonInstance, AddonManifest, AddonModule, AddonStateStore } from '@addons-poc/protocol';
-import { parseAsInteger, parseAsString, useQueryStates } from 'nuqs';
+import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
 import { createResourceFetch } from './runtime/resource-client';
 import { retainInstalledAddons } from './offline';
 import { ServiceRegistry } from './runtime/registry';
@@ -15,8 +15,10 @@ import { SearchResultPage } from './components/SearchResultPage';
 import { CONTENT_VIEW_SERVICE, type ContentViewProvider } from './content-view';
 import { CONTENT_EDITOR_SERVICE, type ContentEditorProvider } from './content-editor';
 import { SearchResultsTable } from './components/SearchResultsTable';
-import { browsePage, clampSearchLimit, createFetchSearchClient, hasNextSearchPage, searchPage } from './search';
-import type { SearchCollection, SearchLanguages, SearchLimitValue, SearchPageState, SearchPagination, SearchProviderError, SearchResultRow } from './search';
+import { ArtistRecommendations } from './components/ArtistRecommendations';
+import { ARTIST_RECOMMENDATIONS_SERVICE, artistRankings, type ArtistRanking, type ArtistRecommendationsProvider } from './artist-recommendations';
+import { browsePage, clampSearchLimit, createFetchSearchClient, hasNextSearchPage, SEARCH_ORDER_SERVICE, searchPage } from './search';
+import type { SearchCollection, SearchLanguages, SearchLimitValue, SearchOrderProvider, SearchPageState, SearchPagination, SearchProviderError, SearchResultRow } from './search';
 import { isResultRoute, manifestUrlFromRoute, navigate, ROUTES, addonRoute, resultUrlFromRoute, useRoute } from './router';
 import { INSTALLATIONS_STORAGE_KEY, resetFactoryStorage } from './factory-reset';
 import { headersToObject, logBrowserHttpExchange } from './http-observability';
@@ -27,6 +29,7 @@ const DEFAULT_SEARCH_PAGE_SIZE = 25;
 const SEARCH_URL_PARAMS = {
   q: parseAsString.withDefault(''),
   artist: parseAsString.withDefault(''),
+  ranking: parseAsStringLiteral(artistRankings),
   page: parseAsInteger.withDefault(1),
   size: parseAsInteger.withDefault(DEFAULT_SEARCH_PAGE_SIZE),
 };
@@ -144,7 +147,8 @@ export function App({ importAddonModule }: AppProps = {}) {
   const [pendingContractUrls, setPendingContractUrls] = useState<string[]>([]);
   const [searchLimits, setSearchLimits] = useState<Record<string, SearchLimitValue>>({});
   const [searchLanguages, setSearchLanguages] = useState<SearchLanguages>({});
-  const [{ q: searchUrlQuery, artist: searchUrlArtist, page: searchUrlPage, size: searchUrlSize }, setSearchUrl] = useQueryStates(SEARCH_URL_PARAMS, { history: 'push' });
+  const [{ q: searchUrlQuery, artist: searchUrlArtist, ranking: searchUrlRanking, page: searchUrlPage, size: searchUrlSize }, setSearchUrl] = useQueryStates(SEARCH_URL_PARAMS, { history: 'push' });
+  const artistRanking = searchUrlArtist.trim() ? searchUrlRanking : null;
   const currentSearchPage = Number.isSafeInteger(searchUrlPage) && searchUrlPage > 0 ? searchUrlPage : 1;
   const currentSearchPageSize = SEARCH_PAGE_SIZES.includes(searchUrlSize as typeof SEARCH_PAGE_SIZES[number])
     ? searchUrlSize
@@ -159,6 +163,8 @@ export function App({ importAddonModule }: AppProps = {}) {
    */
   const openingQueryRef = useRef(searchUrlQuery);
   openingQueryRef.current = searchUrlQuery;
+  const openingArtistRef = useRef(searchUrlArtist);
+  openingArtistRef.current = searchUrlArtist;
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResultRow[]>([]);
   const [searchErrors, setSearchErrors] = useState<SearchProviderError[]>([]);
@@ -387,7 +393,7 @@ export function App({ importAddonModule }: AppProps = {}) {
       setSearchStateReady(true);
       return;
     }
-    if (openingQueryRef.current.trim()) {
+    if (openingQueryRef.current.trim() || openingArtistRef.current.trim()) {
       hydratedStateStoreRef.current = activeStateStoreKey;
       setSearchInput(openingQueryRef.current);
       setSearchStateReady(true);
@@ -446,7 +452,7 @@ export function App({ importAddonModule }: AppProps = {}) {
 
   const clearSearch = useCallback(() => {
     clearSearchView();
-    void setSearchUrl({ q: null, artist: null, page: null });
+    void setSearchUrl({ q: null, artist: null, ranking: null, page: null });
     setSearchRefreshKey((key) => key + 1);
   }, [clearSearchView, setSearchUrl]);
 
@@ -456,10 +462,20 @@ export function App({ importAddonModule }: AppProps = {}) {
   }, [addons, disabledAddonUrls, searchLanguages, searchLimits]);
 
   const refreshResources = useCallback(() => {
-    searchPagesRef.current.clear();
-    browsePagesRef.current.clear();
+    searchPagesRef.current = new Map();
+    browsePagesRef.current = new Map();
     setSearchRefreshKey((key) => key + 1);
   }, []);
+
+  const searchOrderManifest = registry.providerOf(SEARCH_ORDER_SERVICE);
+  const searchOrderProvider = registry.get<SearchOrderProvider>(SEARCH_ORDER_SERVICE);
+  const searchOrder = searchOrderProvider?.get() ?? '';
+  const orderedProvider = searchOrder ? searchOrderManifest : undefined;
+  const changeSearchOrder = (order: string) => {
+    searchOrderProvider?.set(order);
+    void setSearchUrl({ page: 1 });
+    refreshResources();
+  };
 
   const loadSearchPage = useCallback((query: string, page: number) => {
     let cachedPages = searchPagesRef.current.get(query);
@@ -510,14 +526,18 @@ export function App({ importAddonModule }: AppProps = {}) {
       }]));
     }
 
-    // Artist lists need every provider page before alphabetical pagination.
-    if (artistFilter) results.sort((left, right) => left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base', numeric: true }) || left.key.localeCompare(right.key));
+    if (artistFilter) results.sort((left, right) => {
+      const leftOrdered = left.sourceManifestUrl === orderedProvider;
+      const rightOrdered = right.sourceManifestUrl === orderedProvider;
+      if (leftOrdered || rightOrdered) return Number(rightOrdered) - Number(leftOrdered);
+      return left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base', numeric: true }) || left.key.localeCompare(right.key);
+    });
 
     return {
       page: Math.min(displayPage, Math.max(1, Math.ceil(results.length / pageSize))),
       collection: { results, errors: [...errors.values()], providerCount, pagination },
     };
-  }, [loadBrowsePage, loadSearchPage]);
+  }, [loadBrowsePage, loadSearchPage, orderedProvider]);
 
   const loadDisplayPage = useMemo(() => {
     const pages = new Map<string, ReturnType<typeof collectDisplayPage>>();
@@ -537,13 +557,18 @@ export function App({ importAddonModule }: AppProps = {}) {
 
   useEffect(() => {
     if (!installationsReady || !searchStateReady) return;
+    setSearchInput(searchUrlQuery);
+    if (artistRanking) {
+      searchRequestRef.current += 1;
+      setSearching(false);
+      return;
+    }
     const artistFilter = searchUrlArtist.trim();
     const query = searchUrlQuery.trim() || artistFilter;
     const listKey = `${query ? `search:${query}` : 'browse'}${artistFilter ? `:artist:${artistFilter}` : ''}`;
     const changedList = loadedListKeyRef.current !== listKey;
     loadedListKeyRef.current = listKey;
     setBrowsing(!query);
-    setSearchInput(searchUrlQuery);
     setSearchQuery(query);
     if (changedList) {
       setSearchResults([]);
@@ -582,7 +607,7 @@ export function App({ importAddonModule }: AppProps = {}) {
       .finally(() => {
         if (requestId === searchRequestRef.current) setSearching(false);
       });
-  }, [currentSearchPage, currentSearchPageSize, installationsReady, loadDisplayPage, searchRefreshKey, searchStateReady, searchUrlArtist, searchUrlQuery, setSearchUrl]);
+  }, [artistRanking, currentSearchPage, currentSearchPageSize, installationsReady, loadDisplayPage, searchRefreshKey, searchStateReady, searchUrlArtist, searchUrlQuery, setSearchUrl]);
 
   const visibleSearchResults = searchResults.slice(
     (currentSearchPage - 1) * currentSearchPageSize,
@@ -630,8 +655,12 @@ export function App({ importAddonModule }: AppProps = {}) {
     setSearchResults([]);
     setSearchErrors([]);
     setSearchPagination({});
-    void setSearchUrl({ q: artistFilter ? null : query, artist: artistFilter || null, page: 1 });
+    void setSearchUrl({ q: artistFilter ? null : query, artist: artistFilter || null, ranking: null, page: 1 });
   }, [clearSearch, setSearchUrl]);
+
+  const showArtistRanking = (ranking: ArtistRanking | null) => {
+    void setSearchUrl({ ranking, page: 1 });
+  };
 
   const installFromUrl = useCallback(async (value: string, acceptedFingerprint: string): Promise<string | undefined> => {
     let manifestUrl: string;
@@ -794,6 +823,11 @@ export function App({ importAddonModule }: AppProps = {}) {
   }, [addons, registry]);
   const isAddonRoute = route.startsWith('/addons/');
   const isSearchResultRoute = isResultRoute(route);
+  const artistPageName = route === ROUTES.home ? searchUrlArtist.trim() : '';
+  const artistRecommendations = artistPageName
+    ? registry.get<ArtistRecommendationsProvider>(ARTIST_RECOMMENDATIONS_SERVICE)
+    : undefined;
+  const showingArtistRanking = route === ROUTES.home && artistRanking !== null;
   const searchResultContentUrl = resultUrlFromRoute(route);
   const selectedSearchResult = searchResultContentUrl
     ? searchResults.find((result) => result.url === searchResultContentUrl) ?? null
@@ -818,19 +852,25 @@ export function App({ importAddonModule }: AppProps = {}) {
         addons={addons.filter((addon) => !disabledAddonUrls.includes(addon.manifestUrl))}
         searchValue={searchInput}
         searchDisabled={!installationsReady || !searchStateReady}
-        searching={searching}
+        searching={!showingArtistRanking && searching}
+        searchLabel={showingArtistRanking ? 'Filtrar artistas no ranking' : undefined}
         onSearchValueChange={setSearchInput}
-        onSearch={(value) => void runSearch(value)}
-        onClearSearch={clearSearch}
+        onSearch={(value) => {
+          if (showingArtistRanking) void setSearchUrl({ q: value.trim() || null });
+          else runSearch(value);
+        }}
+        onClearSearch={showingArtistRanking ? () => { void setSearchUrl({ q: null }); } : clearSearch}
         onSettingsNavigate={handleSettingsNavigate}
       />
 
       <main
-        className={route === ROUTES.home ? 'host-home-main' : isSearchResultRoute ? 'host-search-result-page-main' : isAddonRoute ? 'host-addon-route-main' : undefined}
+        className={route === ROUTES.home
+          ? `host-home-main${artistRecommendations ? ' host-artist-layout' : ''}`
+          : isSearchResultRoute ? 'host-search-result-page-main' : isAddonRoute ? 'host-addon-route-main' : undefined}
         // A rendered result uses the whole window; prose keeps a readable width.
         style={{ maxWidth: isSearchResultRoute ? '100%' : 1200, margin: '0 auto', padding: '24px 24px 48px' }}
       >
-        {!isAddonRoute && !isSearchResultRoute && (
+        {!isAddonRoute && !isSearchResultRoute && !showingArtistRanking && (
           <SearchResultsTable
             query={searchQuery}
             artistFilter={searchUrlArtist}
@@ -843,6 +883,9 @@ export function App({ importAddonModule }: AppProps = {}) {
             page={currentSearchPage}
             pageSize={currentSearchPageSize}
             pageSizes={SEARCH_PAGE_SIZES}
+            searchOrder={searchOrder}
+            searchOrderOptions={searchOrderProvider?.options()}
+            onSearchOrderChange={changeSearchOrder}
             canGoPrevious={currentSearchPage > 1}
             canGoNext={hasMoreSearchResults}
             onClearSearch={clearSearch}
@@ -856,6 +899,16 @@ export function App({ importAddonModule }: AppProps = {}) {
             onPageSizeChange={changeSearchPageSize}
           />
         )}
+        {(artistRecommendations || showingArtistRanking) && <ArtistRecommendations
+          key={artistPageName}
+          name={artistPageName}
+          provider={artistRecommendations}
+          revision={searchRefreshKey}
+          ranking={artistRanking}
+          query={searchUrlQuery}
+          onRankingChange={showArtistRanking}
+          onArtistSearch={(artist) => runSearch(artist, artist)}
+        />}
         {route === ROUTES.settings ? (
           <section className="host-settings-page">
             <AddonManager
@@ -884,6 +937,7 @@ export function App({ importAddonModule }: AppProps = {}) {
             result={selectedSearchResult}
             ready={installationsReady && searchStateReady}
             onBackToResults={returnToResults}
+            onArtistSearch={(artist) => runSearch(artist, artist)}
             previousResultUrl={selectedSearchResultIndex > 0 ? searchResults[selectedSearchResultIndex - 1]?.url : null}
             nextResultUrl={selectedSearchResultIndex >= 0 ? searchResults[selectedSearchResultIndex + 1]?.url ?? null : null}
             viewProvider={contentViewProvider}

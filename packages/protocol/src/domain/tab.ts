@@ -18,8 +18,12 @@ export interface AddonTabField {
   label: string;
   type?: AddonTabFieldType;
   placeholder?: string;
-  /** Accepted file types when `type` is `file`. The host reads the file as text for the action. */
+  /** Accepted file types when `type` is `file`. */
   accept?: string;
+  /** For a file control, runs this action with a transient JSON list of { name, url } object URLs. */
+  fileAction?: string;
+  /** Defaults to allowing several files when a file action is declared. */
+  fileMultiple?: boolean;
   required?: boolean;
   /** Keeps this control out of tab persistence and clears it after an action receives it. */
   sensitive?: boolean;
@@ -112,6 +116,8 @@ export interface AddonTabPersistence {
  * rules when it receives the action and filled values.
  */
 export interface AddonTab extends AddonTabMetadata {
+  /** Control groups to show in Settings. The default is the group named Settings. */
+  settingsGroups?: string[];
   fields?: AddonTabField[];
   actions?: AddonTabAction[];
   run?: (actionId: string, values: Record<string, string>) => AddonTabResult | Promise<AddonTabResult>;

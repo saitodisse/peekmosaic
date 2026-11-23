@@ -1,6 +1,8 @@
 import { MAX_ARCHIVE_BYTES, readZip } from './zip-source.js';
 import { readTarZstd } from './tar-zstd-source.js';
 import { decryptArchive } from './archive-crypto.js';
+import { sourcePageUrls } from './source-page.js';
+import { readArchiveArtistRelations } from './artist-relations.js';
 
 const ENTITY_TYPES = new Set(['artist', 'musicalWork', 'playableVersion', 'chordChart', 'voicing', 'chordAlias']);
 const SCHEMAS = new Set(['1.0.0', '1.1.0', '1.2.0', '1.3.0']);
@@ -245,6 +247,7 @@ async function importScraper(root, files) {
       tags: genre?.name ? [genre.name] : [], visits: statistics?.allTimeViews ?? 0,
       updatedAt: details.sourceUpdatedAt ?? data.collectedAt, collectedAt: data.collectedAt,
       sourceRoot: root, sourceId: 'artist-portal-scraper', sourceName: data.source ?? 'Artist Portal Scraper', sourceUrl,
+      ...sourcePageUrls(data.page, sourceUrl),
       versionLabel: details.version?.name ?? 'Imported version', instrumentId: instrument ?? details.instrument?.slug ?? 'unknown',
       tuningId: instrument === 'guitar' && details.tuning === 'E A D G B E' ? 'guitar-standard' : undefined,
       tuning: details.tuning,
@@ -291,11 +294,21 @@ export async function importArchive(root, input, credentials = {}, fetchFn = fet
   let files;
   if (bytes[0] === 0x50 && bytes[1] === 0x4b) files = await readZip(bytes);
   else if (bytes[0] === 0x28 && bytes[1] === 0xb5 && bytes[2] === 0x2f && bytes[3] === 0xfd) files = await readTarZstd(bytes);
-  else throw new Error('Source URL did not return a ZIP or TAR.ZST archive.');
+  else throw new Error('File is not a ZIP or TAR.ZST archive.');
   const manifests = [...files.keys()].filter((path) => path.split('/').at(-1) === 'source-manifest.json');
   if (manifests.length > 1) throw new Error('Archive contains multiple Source Catalog manifests.');
-  if (manifests.length) return importCatalogue(root, fetchFn, files, manifests[0].slice(0, -'source-manifest.json'.length));
-  return importScraper(root, files);
+  const relations = readArchiveArtistRelations(files);
+  if (manifests.length === 0 && ![...files.keys()].some((path) => path.endsWith('.source.json'))) {
+    if (relations.warning) throw new Error(relations.warning);
+    if (relations.records) return { root, sourceId: 'artist-portal-scraper', name: 'Artist relationships',
+      importedAt: new Date().toISOString(), charts: [], artistRelations: relations.records };
+  }
+  const snapshot = manifests.length
+    ? await importCatalogue(root, fetchFn, files, manifests[0].slice(0, -'source-manifest.json'.length))
+    : await importScraper(root, files);
+  if (relations.records) snapshot.artistRelations = relations.records;
+  if (relations.warning) snapshot.warnings = [...(snapshot.warnings ?? []), relations.warning];
+  return snapshot;
 }
 
 export async function updateSources(value, store, fetchFn = fetch, credentials = {}) {
@@ -310,7 +323,8 @@ export async function updateSources(value, store, fetchFn = fetch, credentials =
       } : fetchFn;
       const snapshot = await importSource(source.root, authenticatedFetch, credentials);
       await store.put(snapshot);
-      results.push({ root: source.root, count: snapshot.charts.length, ...(snapshot.warnings?.length ? { warnings: snapshot.warnings } : {}) });
+      results.push({ root: source.root, count: snapshot.charts.length, artistCount: snapshot.artistRelations?.length,
+        ...(snapshot.warnings?.length ? { warnings: snapshot.warnings } : {}) });
     } catch (error) { results.push({ root: source.root, error: error.message }); }
   }
   return results;

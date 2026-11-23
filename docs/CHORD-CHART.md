@@ -130,7 +130,7 @@ inserts it inside the tab:
 ```json
 {
   "status": "success",
-  "body": "Harbor Light — Mare Alta\nkey G · playing G …\n\n[Intro]…",
+  "body": "Chart title — Artist name\nkey G · playing G …\n\n[Intro]…",
   "view": { "kind": "html", "html": "<pre data-tab-root …>" }
 }
 ```
@@ -241,14 +241,14 @@ musical work, a playable version, the chart record, the sections, and the shapes
 
 ```json
 {
-  "id": "harbor-light",
-  "title": "Harbor Light",
-  "musicalWork": { "title": "Harbor Light", "artistName": "Mare Alta", "composers": ["Ana Reis"] },
-  "playableVersion": { "id": "harbor-light-original", "key": "G", "capo": 0, "tempo": 96, "time": "4/4" },
+  "id": "chart-id",
+  "title": "Chart title",
+  "musicalWork": { "title": "Chart title", "artistName": "Artist name", "composers": ["Ana Reis"] },
+  "playableVersion": { "id": "chart-id-original", "key": "G", "capo": 0, "tempo": 96, "time": "4/4" },
   "notation": { "format": "chord-over-lyrics", "sectionMarkers": "square-brackets" },
   "chordChart": {
-    "id": "harbor-light-chart",
-    "playableVersionId": "harbor-light-original",
+    "id": "chart-id-chart",
+    "playableVersionId": "chart-id-original",
     "rawFormat": "chord-over-lyrics",
     "rawText": "[Intro]\n(G / D/F# / Em / C) - 2x\n...",
     "rawTextChecksum": "0f71a404…",
@@ -323,7 +323,7 @@ Deliberate differences, all of them recorded because they change behaviour:
 
 | Decision here | Reason |
 | --- | --- |
-| Charts are original demo data, not the AC archive | The archive is licensed content and belongs to another project; see [decision 22](DECISIONS.md#22-the-chord-chart-add-ons-are-independent-of-the-ac-projects) |
+| Charts come from user-configured sources | The archive is licensed content and belongs to another project; see [decision 22](DECISIONS.md#22-the-chord-chart-add-ons-are-independent-of-the-ac-projects) |
 | The engine is copied instead of depended on | The two projects must stay independent; the copy carries its license and provenance |
 | The rendered view travels in the response | The host renders text responses only, so the protocol declares an explicit `view` field |
 | The add-on returns HTML instead of mounting React itself | The host keeps owning the page and the layout, and the response stays serializable |
@@ -331,8 +331,7 @@ Deliberate differences, all of them recorded because they change behaviour:
 
 ### Limits
 
-* The bundled catalogue holds eight demo charts; downloaded charts are kept
-  separately by source in the device library.
+* The catalogue starts empty. Imported charts are kept by source in the device library.
 * Only the `chord-over-lyrics` family is parsed. Tablature lines are treated as
   lyric text and never as chords.
 * A section title sharing its line with content produces a warning and the
@@ -373,8 +372,8 @@ is needed to render a chart, and it accepts a pasted chart text as well.
 
 ### Why
 
-The demonstration catalogue has a fixed collection. Configurable sources let a
-person build a library of charts and read them when the sources are unavailable.
+Configurable sources let a person build a library of charts and read them when
+the sources are unavailable.
 
 ### What
 
@@ -399,18 +398,20 @@ data in the browser also removes the library.
 ### Importing a ZIP of scraper downloads
 
 ZIP and TAR.ZST archives are supported, including the entire `downloads/` folder.
-Choose **Local archive** to import a file directly, then press **Update catalogue**.
-The file stays on this device and is read only for that action. The imported
+In **Settings → Local archives**, select multiple files or drop them in the
+file area. Import starts immediately and processes one file at a time. The
+report names each file and a failed part does not prevent the others from being
+imported. The files stay on this device and are read only for that action. The imported
 snapshot is identified by a URL containing its SHA-256; the same file replaces
 its previous snapshot, while a changed file creates a separate snapshot. Copy
 that identifier from the list into **Downloaded source to delete** to remove it.
-The archive type and encryption are detected from the bytes, not its extension;
-only encrypted archives require the certificate and passphrase. The same
-compressed-size and extraction limits apply to URL and local imports.
+The local area accepts unencrypted archives. Use **Import from address** for
+encrypted links with a certificate and passphrase. The archive format is
+detected from its bytes. Size and extraction limits apply per archive.
 
 For an archive exceeding these limits, create several independent TAR.ZST files
-and import each separately. Do not split the compressed bytes: every part must
-be a complete archive with each chart's TXT and matching metadata together.
+and select the parts together. Each part must be a complete archive with each
+chart's TXT and matching metadata together.
 Each part is a separate snapshot. The importer accepts the `./` root directory
 entry produced when archiving the current directory.
 
@@ -442,19 +443,37 @@ Each chart needs a `.txt` and matching `.source.json`; the metadata must include
 `file.sha256`, `file.bytes` and `file.name` are checked before import. Text,
 including spaces and line endings, is preserved. The converter keeps the chart
 text and only fields used by the app: title, artist, source URL, key, capo,
-instrument, tuning, version, composers, genre, selected view counts and collection
-dates. It does not save the complete `.source.json`, chord definitions or other
+instrument, tuning, version, composers, genre, selected view and list counts,
+collection dates, and the source page's canonical and image URLs. It does not
+save the complete `.source.json`, chord definitions or other
 unused fields in IndexedDB. Imported charts do not receive demo chord shapes.
-`source.url` is the original song URL; `source.catalogueUrl` is the archive used to
-import it. Archive imports use the same IndexedDB library and offline search/reading
-as Source Catalog imports.
+`source.url` is the original song URL, and `source.catalogueUrl` is the archive
+used to import it. When present in the export, `source.canonicalUrl` and
+`source.imageUrl` carry the URLs declared by the source page. Reimport the
+original archive to recover these URLs if an earlier import discarded them.
+Archive imports use the same IndexedDB library and offline search/reading as
+Source Catalog imports.
 
 The structured response also exposes the artist's genre as `musicalWork.genre`
 and the source's view and list counts as `playableVersion.statistics`, when
-available. These values describe the collection date; they are not live counts.
-The popular catalogue uses the imported all-time view count. Existing local
-imports are compacted when the updated catalogue opens, so they do not need to be
-downloaded again.
+available. These values describe the collection date. The popular catalogue uses
+the imported all-time view count.
+
+In the catalogue's **Settings**, **Copy artists (A–Z)** and **Copy artists by
+total views** copy the entire local catalogue as tab-separated text. Both
+include artist, song count, and total views. Multiple versions or imports of
+the same title for an artist count as one song and use its highest recorded
+view count. Songs without source view counts contribute zero. Paste the
+result into a spreadsheet to use the three columns.
+
+Use **Sort by** in the main catalogue, search results, or an artist list to rank charts
+by all-time views or list appearances, highest first. Charts missing the selected
+count follow charts with a known count. The add-on applies the order before
+pagination and stores one shared preference in browser localStorage. The default
+uses recency for the main catalogue, relevance for a search, and song title for
+an artist list. The search index
+is rebuilt from existing local charts, so stored statistics are available without
+reimporting the archive.
 
 The archive's URL identifies the snapshot. Updating the same URL replaces that
 snapshot; changing a signed URL creates a separate source. Prefer a stable URL
@@ -465,13 +484,79 @@ reject the whole snapshot and keep the previous version. `songs.json` and
 unrelated non-chart files are ignored. TXT files without metadata (such as an
 auxiliary `musicas.txt` list) are skipped with a warning in the import report.
 
+### Importing artist relationships
+
+Open **Settings → Artist relationships** to import a standalone JSON file. You
+can also include exactly one file named `artist-relations.v1.json` anywhere in a
+ZIP or TAR.ZST archive. A malformed relationship file in an archive with valid
+charts produces a warning while those charts still import. Archives without the
+file leave the saved relationships in place. A successful relationship import
+replaces the previous dataset on the device.
+
+Open an artist from the search results to see recommendations alongside their
+charts. Select a category, related artists or co-listening in the sidebar to
+open the full ranking in the results area. The search field filters the active
+ranking by artist name and preserves the original positions. The URL records
+the artist, ranking and search term. The related-artists ranking identifies the
+reference artist and sorts candidates by how many models recommend them from
+that artist, then by documented connections and co-listening. Candidates who
+tie on all three criteria share a position.
+Category scores average the available model ratings. The sidebar orders
+categories by the selected artist's score. Category rankings order artists
+by score and share positions when scores tie. Co-listening uses the
+share of the selected artist's listeners who also listened to each candidate,
+subject to the dataset's minimum sample sizes. All views use the local import.
+
+The UTF-8 file uses `schemaVersion: 1` and `catalogue: "artist-portal-scraper"`.
+Use the exact scraper artist `slug` rather than the folder label displayed on
+screen. List an unordered pair once. The importer builds an entry for each
+direction for use on either artist's chart page.
+
+```json
+{
+  "schemaVersion": 1,
+  "catalogue": "artist-portal-scraper",
+  "artists": [
+    { "slug": "artist-a", "name": "Artist A", "style": "Rock" },
+    { "slug": "artist-b", "name": "Artist B", "style": "Pop" }
+  ],
+  "pairs": [
+    { "a": "artist-a", "b": "artist-b", "discovery": { "jev": "ab", "microsoft": "both" } }
+  ]
+}
+```
+
+`discovery` supports `both`, `ab`, `ba`, `neither` and `unknown`.
+`ab` means artist B is a discovery for the audience of artist A. Optional
+artist and song ratings use the same `jev` and `microsoft` keys, each mapping
+context keys such as `festa`, `karaoke`, `intimista`, `escrachado`,
+`cantar_junto` and `casamento` to scores from 0 to 3. Omit a score when the
+evidence is insufficient. Each optional `songs` item has `title` and can
+include `url` and `ratings`.
+
+A pair may include `evidence` objects with a `kind`, an HTTP(S) `url` and
+optional `detail`. The supported kinds are `gravacao_estudio`, `convite`,
+`apresentacao`, `mesmo_evento`, `mesma_banda`, `composicao`,
+`producao_arranjo`, `influencia` and `alias_historico`.
+
+An audience sample declares `source`, `from` and `through` (inclusive
+YYYY-MM-DD dates), `totalListeners`, `minArtistListeners` and
+`minSharedListeners`. Supply each artist's `listeners` and each pair's
+`sharedListeners` for the same sample. The chart page computes co-listening
+rates only when the minimums are met.
+
+The catalogue stores one IndexedDB record per artist. The structured chart
+includes an optional `artistRelationsUrl`. The host reads that resource
+through the browser catalogue when the reader opens **Relações do artista**.
+The JSON file limit is 32 MiB and the existing archive limits still apply.
+
 ### End-to-end encrypted archive links
 
 The catalogue also accepts `.tar.zst.enc` URLs. The portal distributes only
 ciphertext; its short-lived token authorizes downloading those bytes, while a
 local certificate is required to read them. The token may be kept in the URL
 fragment and is sent by the catalogue in an `Authorization` header. In the
-catalogue's **Settings** controls, select the local `.cvcert` file and enter its
+catalogue's **Import from address** section, select the local `.cvcert` file and enter its
 passphrase before pressing **Update catalogue**.
 
 The archive is encrypted before upload with a random AES-256-GCM data key,
@@ -518,7 +603,7 @@ node scripts/verify-scraper-archive.mjs ../artist-portal-scraper/downloads.tar.z
 ```
 
 This explicit integration check requires local `tar` and `zstd`. It compares every
-imported chart's text, SHA-256 and complete metadata with the original files in a
+imported chart's text, SHA-256, statistics and page URLs with the original files in a
 temporary extraction directory, then deletes that temporary directory.
 
 Source snapshots use small IndexedDB records within one transaction, avoiding

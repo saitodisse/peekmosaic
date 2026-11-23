@@ -1,10 +1,9 @@
-import { CHARTS } from './data/charts.js';
-import { findChart, listCatalog, paginate, searchCharts } from './catalog.js';
+import { findChart, listCatalog, maximumChartViews, paginate, searchCharts } from './catalog.js';
 import { CHART_TYPE, contentPath, toContentJson, toMeta, toTextOption } from './payloads.js';
 
 /** Default dependencies; tests replace them without touching the network. */
 const DEFAULT_DEPENDENCIES = {
-  charts: CHARTS,
+  charts: [],
   baseUrl: 'http://localhost:5295',
   now: () => new Date(),
   requestId: () => undefined,
@@ -69,6 +68,7 @@ export async function contentJson(type, id, options, dependencies) {
       requestId: requestId(),
       durationMs: 0,
       generatedAt: now().toISOString(),
+      catalogueMaxViews: maximumChartViews(charts),
     }),
   };
 }
