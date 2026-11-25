@@ -77,7 +77,8 @@ The parser accepts the variations found in the archive:
 | Element | Accepted forms |
 | --- | --- |
 | Section titles | Any short name between brackets, in any language: `[Intro]`, `[Chorus]`, `[Solo]`, `[Outro]` |
-| Section boundaries | One or more blank lines separate blocks even without a title; whitespace-only lines also count. Blank lines immediately after a title keep that title attached to its content. |
+| Chords after a section title | `[Intro] A` and `[Solo] A  E  A  D` put the chords on the first row under the title |
+| Section boundaries | Blank lines separate blocks even without a title; whitespace-only lines also count. A single blank line between two lyric lines marks a continuation. Blank lines immediately after a title keep that title attached to its content. |
 | Chord lines | Any line with more chord tokens than lyric tokens |
 | Chord-only lines | `G   D   Em   C`, used for intros and solos |
 | Annotations | `(G / D / F#) - 2x`, `( Bm   D   G )` |
@@ -86,6 +87,7 @@ The parser accepts the variations found in the archive:
 | Slash extensions | `D7/9`, `C6/9` — a number after the slash is an extension, not a bass |
 | Repeats | `/` and `%` |
 | Decoration | `(Bm  A7)` keeps the parentheses around a group of chords |
+| Riff references | `(Riff 1)` on a chord row is a marker. Hiding tablature clears the marker and keeps the chords in their original columns. |
 
 Words that only start like a chord stay lyric words: `Eu`, `De`, `Com`, and
 `Amor` are rejected by the grammar because `m` and `M` only count as a quality
@@ -115,7 +117,21 @@ rawText ──parseTab──► ParsedTab ──transposeParsedTab──► Pars
 The parse is column-based, exactly like the source: every token carries
 `startColumn` and `endColumn`, and a chord is drawn above the lyric line with
 `position: relative` plus a negative right margin, not by rewriting the text.
-The current parser reports `parserVersion` `2.2.3` and keeps `astVersion` at `2.2.2`.
+The current parser reports `parserVersion` `2.2.11` and keeps `astVersion` at `2.2.2`.
+A line containing only a parenthesized chord group can accompany the lyric
+below it. The parentheses are decorations, and the chords keep their columns.
+Standalone `|` markers divide chord rows into measures, including instrumental
+rows without lyrics.
+The chord list comes from chord rows, so a standalone letter in the lyrics
+does not produce a chord diagram.
+The parser joins lyric lines separated by a single blank line with four spaces.
+This also works for several consecutive continuations and for lyrics without
+an initial chord. Two or more blank lines preserve a block boundary. The chart's
+source text stays intact.
+An instrumental chord group in parentheses followed by a chord-and-lyric pair
+shares the chord row with that pair. The lyric keeps its offset from the entry
+chord. Hidden tablature, including parenthesized part captions, leaves the
+instrumental group under the named section.
 
 The port left out the legacy path that depends on `@tonaljs/tonal`
 (`prepareSong`, `splitSections`, `pairLines`, the `transposer` folder) because
@@ -276,8 +292,12 @@ server.
 
 The editor reads a chart's `content.json`, presents its original text in
 Monaco, and asks the viewer's `addons.chords.viewer.render` service to produce
-the live preview. Monaco assets come from the editor's own server, not the
-host. If Monaco is unavailable, the text area still allows an edit.
+the live preview. The preview header offers transposition in semitones and
+font size. These controls apply to the preview for the current editing session.
+Add `edit=1` to the chart page's query string before `#/article/…` to open it
+directly in edit mode. Returning to reading clears this parameter.
+Monaco assets come from the editor's own server, not the host. If Monaco is
+unavailable, the text area still allows an edit.
 
 The **Save local draft** action writes through `state-store`. The saved record
 contains the full source URL, edited text, and checksum of the published text.
@@ -334,8 +354,8 @@ Deliberate differences, all of them recorded because they change behaviour:
 * The catalogue starts empty. Imported charts are kept by source in the device library.
 * Only the `chord-over-lyrics` family is parsed. Tablature lines are treated as
   lyric text and never as chords.
-* A section title sharing its line with content produces a warning and the
-  content on that line is ignored.
+* A section title sharing its line with lyrics produces a warning and the
+  lyrics on that line are ignored.
 * Chord diagrams are not drawn in the rendered view: they would need a canvas or
   SVG library, which is out of scope here. The catalogue still publishes the
   shapes, and the summary lists them.
@@ -395,7 +415,18 @@ chart variants. Removing a URL stops future updates and keeps its downloaded
 charts. **Delete downloaded source** removes one source explicitly; clearing site
 data in the browser also removes the library.
 
-### Importing a ZIP of scraper downloads
+### Importing local scraper downloads
+
+In **Settings → Local archives**, drop scraper files or folders into the import
+area, or use **Choose a folder**. The importer walks subfolders and matches each
+`.txt` chart with the `.source.json` of the same name in the same folder. Keep
+both files together so the importer can validate the chart and identify its song.
+
+The search lists the song under its principal version. The song page links to
+the other versions, including those already in the library. Importing a loose
+version again updates that version and preserves the others. The
+catalogue prefers directly imported copies over matching archive copies, which
+remain available through their existing links.
 
 ZIP and TAR.ZST archives are supported, including the entire `downloads/` folder.
 In **Settings → Local archives**, select multiple files or drop them in the
@@ -483,6 +514,25 @@ metadata without its matching TXT, malformed metadata or mismatched hashes
 reject the whole snapshot and keep the previous version. `songs.json` and
 unrelated non-chart files are ignored. TXT files without metadata (such as an
 auxiliary `musicas.txt` list) are skipped with a warning in the import report.
+
+### Song versions
+
+A música aparece uma vez na busca e no catálogo. A cifra principal abre como
+página da música. O cabeçalho mostra as versões importadas e permite abrir
+qualquer uma delas com um clique. A versão aberta fica marcada e as
+alternativas também oferecem um link de volta à principal.
+
+O catálogo grava a relação no IndexedDB do navegador. Em importações do
+scraper, a URL-base do Cifra Club identifica a música, mesmo se as versões
+vierem de arquivos diferentes. A URL de cada versão preserva seu endereço
+próprio e cópias da mesma versão compartilham uma entrada na navegação.
+O índice é preenchido também para cifras do Cifra Club já importadas.
+Em novos arquivos Source Catalog, o identificador da obra associa as cifras
+e as versões chamadas Principal ou Original têm prioridade.
+
+Quando o arquivo traz somente alternativas, uma versão disponível representa
+a música na busca até a principal ser importada. Os links oferecem as cifras
+importadas de pares `.source.json` e `.txt` ou de registros Source Catalog.
 
 ### Importing artist relationships
 
@@ -696,14 +746,17 @@ responsivo existente.
 
 A opção `Hide tablature`, no grupo `Reading` do painel do visualizador, começa
 ativada e é salva como preferência global pelo `state-store`. Ela esconde as
-linhas de cordas (`E|---`, `B|---` etc.) e seus complementos imediatamente
-acima: títulos `[Tab - ...]`, indicações `Parte 1 de 3`, acordes isolados e
-marcas de técnica como `H.N.`. Títulos musicais como `[Solo]`, acordes
+linhas de cordas com nome (`E|---`, `B|---`) ou sem nome (`|---`) e seus
+complementos imediatamente acima, como títulos `[Tab - ...]`, indicações
+`Parte 1 de 3`, legendas `1ª guitarra` e `riff 1`, acordes isolados e marcas
+de técnica como `H.N.`. Títulos musicais como `[Solo]`, acordes
 acompanhados de letra e o texto original armazenado permanecem preservados.
 Linhas de tempo como `2:52`, identificações de instrumento como
-`(Primeiro Violão)` e indicações de tablatura antes ou depois do bloco também
+`(Primeiro Violão)` e `( Violão 1 )` e indicações de tablatura antes ou depois do bloco também
 são ocultadas. Linhas com slides como `4s5` também desaparecem quando fazem
 parte de uma tablatura.
+Contagens como `1 . . . 2 . . .` e setas de batida são ocultadas entre os
+diagramas e junto às extremidades do bloco.
 Desligar a opção volta a mostrar esse conteúdo. O filtro pertence ao
 `tab-renderer` e é aplicado antes da análise de acordes, nos dois layouts.
 

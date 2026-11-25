@@ -1,12 +1,13 @@
+import { chartVersionRecord, preferVersion, principalCharts } from './chart-versions.js';
 import { manifest } from './manifest.js';
 import { ARTIST_EXPORT_ACTIONS, artistExport } from './artist-export.js';
 import { ARTIST_RELATIONS_FILE, MAX_ARTIST_RELATIONS_BYTES, parseArtistRelations } from './artist-relations.js';
 import { CATALOGS } from './data/catalogs.js';
 import { listCatalog, maximumChartViews, searchMetadataIndex, paginate } from './catalog.js';
-import { toMeta, toContentJson, toTextOption } from './payloads-core.js';
+import { contentPath, toMeta, toContentJson, toTextOption } from './payloads-core.js';
 import { createLibraryStore } from './library-store.js';
 import { MAX_ARCHIVE_BYTES } from './zip-source.js';
-import { sha256, sourceLines, updateSources, importArchive } from './source-import.js';
+import { sha256, sourceLines, updateSources, importArchive, importScraperFiles } from './source-import.js';
 
 export { manifest };
 const SETTINGS_KEY = 'addons:state:chord-catalog:settings:v1';
@@ -16,11 +17,14 @@ const SEARCH_ORDER_OPTIONS = [
   { id: 'listAppearances', label: 'Most list appearances' },
 ];
 const LOCAL_IMPORT = 'Local archives';
+const ARCHIVE_FILE = /\.(zip|tar\.zst|tzst|enc)$/i;
+const SCRAPER_FILE = /(?:\.txt|\.source\.json)$/i;
+const MAX_SCRAPER_FILE_BYTES = 32 * 1024 * 1024;
 const ARTIST_RELATIONS = 'Artist relationships';
 const REMOTE_IMPORT = 'Import from address';
 const LIBRARY = 'Library';
 const FIELDS = [
-  { id: 'archives', label: 'Archive files (.zip, .tar.zst, .tzst)', type: 'file', accept: '.zip,.tar.zst,.tzst,application/zip,application/zstd', group: LOCAL_IMPORT, sensitive: true, fileAction: 'import-local' },
+  { id: 'archives', label: 'Archives or chart files (.zip, .tar.zst, .tzst, .txt, .source.json)', type: 'file', accept: '.zip,.tar.zst,.tzst,application/zip,application/zstd,.txt,.json', group: LOCAL_IMPORT, sensitive: true, fileAction: 'import-local', fileDirectories: true },
   { id: 'artistRelations', label: `Relationship dataset (${ARTIST_RELATIONS_FILE})`, type: 'file', accept: '.json,application/json', group: ARTIST_RELATIONS, sensitive: true, fileAction: 'import-artist-relations', fileMultiple: false },
   { id: 'sources', label: 'Source catalogue URLs (one per line)', type: 'textarea', group: REMOTE_IMPORT, placeholder: 'https://example.com/source-catalog/\nhttps://example.com/downloads.tar.zst.enc#token=…' },
   { id: 'deleteSource', label: 'Downloaded source to delete (URL)', type: 'url', group: LIBRARY, placeholder: 'https://example.com/downloads.tar.zst.enc' },
@@ -28,7 +32,7 @@ const FIELDS = [
   { id: 'certificatePassphrase', label: 'Certificate passphrase', type: 'text', group: REMOTE_IMPORT, sensitive: true },
 ];
 const ACTIONS = [
-  { id: 'import-local', label: 'Import local archives', group: LOCAL_IMPORT, receives: ['archives'] },
+  { id: 'import-local', label: 'Import local catalogue files', group: LOCAL_IMPORT, receives: ['archives'] },
   { id: 'import-artist-relations', label: 'Import artist relationships', group: ARTIST_RELATIONS, receives: ['artistRelations'] },
   { id: 'update', label: 'Update catalogue', group: REMOTE_IMPORT, receives: ['sources', 'certificate', 'certificatePassphrase'] },
   { id: 'delete', label: 'Delete downloaded source', variant: 'danger', group: LIBRARY, receives: ['deleteSource'] },
@@ -49,13 +53,13 @@ function invalidateCatalogue() {
 
 function loadCharts() {
   return chartSnapshot ??= library.list()
-    .then((sources) => sources.flatMap((source) => source.charts))
+    .then((sources) => principalCharts(sources.flatMap((source) => source.charts), (chart) => chartVersionRecord(chart)))
     .catch((error) => { chartSnapshot = undefined; throw error; });
 }
 
 async function prepareSearchIndex() {
   return searchIndex ??= library.searchEntries()
-    .then((entries) => ({ entries, catalogueMaxViews: maximumChartViews(entries) }))
+    .then((entries) => ({ entries: principalCharts(entries, (entry) => entry.version), catalogueMaxViews: maximumChartViews(entries) }))
     .catch((error) => { searchIndex = undefined; throw error; });
 }
 
@@ -119,6 +123,24 @@ async function contentPayload(chart) {
     ? await prepareSearchIndex().then((index) => index.catalogueMaxViews, () => undefined)
     : undefined;
   const payload = toContentJson(chart, { baseUrl, checksum: chart.checksum, catalogueMaxViews });
+  const current = chartVersionRecord(chart, chart.sourceRoot);
+  if (current) {
+    const alternatives = new Map();
+    for (const version of await library.getChartVersions(current.work)) {
+      if (version.version === current.version) continue;
+      const previous = alternatives.get(version.version);
+      if (!previous || preferVersion(version, previous)) alternatives.set(version.version, version);
+    }
+    if (alternatives.size) {
+      const versions = [current, ...alternatives.values()];
+      versions.sort((a, b) => Number(b.principal) - Number(a.principal) || a.label.localeCompare(b.label, 'pt-BR'));
+      payload.contentVersions = versions.map((version) => ({
+        label: version.label,
+        url: new URL(contentPath(version, 'txt'), baseUrl).href,
+        current: version.id === chart.id,
+      }));
+    }
+  }
   const artistSlug = chart.artist?.slug;
   if (chart.sourceId === 'artist-portal-scraper' && artistSlug && await library.hasArtistRelations(artistSlug)) {
     payload.artistRelationsUrl = new URL(`artist-relations/${encodeURIComponent(artistSlug)}.json`, baseUrl).href;
@@ -208,7 +230,7 @@ export function createTab() {
         invalidateCatalogue();
         return { status: 'success', body: `Downloaded charts deleted: ${candidates[0].root}` };
       }
-      if (actionId === 'import-local') return importLocalArchives(values.archives);
+      if (actionId === 'import-local') return importLocalFiles(values.archives);
       if (actionId === 'import-artist-relations') return importLocalArtistRelations(values.artistRelations);
       if (actionId !== 'update') throw new Error('Unknown catalogue action.');
       // Save the list before downloading, even if every source fails.
@@ -246,12 +268,18 @@ async function importLocalArtistRelations(value) {
   }
 }
 
-async function importLocalArchives(value) {
-  const archives = JSON.parse(value ?? '[]');
-  if (!Array.isArray(archives) || archives.length === 0) throw new Error('Select at least one archive.');
+async function importLocalFiles(value) {
+  const files = JSON.parse(value ?? '[]');
+  if (!Array.isArray(files) || files.length === 0) throw new Error('Select catalogue files or folders.');
   const results = [];
-  for (const archive of archives) {
+  const scraperFiles = [];
+  for (const archive of files) {
     const name = typeof archive?.name === 'string' ? archive.name : 'Local archive';
+    if (SCRAPER_FILE.test(name)) {
+      scraperFiles.push(archive);
+      continue;
+    }
+    if (archive?.path && !ARCHIVE_FILE.test(name)) continue;
     try {
       const bytes = await readLocalFile(archive, MAX_ARCHIVE_BYTES, 'Archive exceeds the 128 MiB import limit.');
       const root = `https://local-upload.invalid/${await sha256(bytes)}/`;
@@ -263,6 +291,37 @@ async function importLocalArchives(value) {
       results.push({ name, error: error.message });
     }
   }
+  if (scraperFiles.length) {
+    try {
+      const entries = new Map();
+      let size = 0;
+      for (const file of scraperFiles) {
+        const path = file.path ?? file.name;
+        if (typeof path !== 'string' || /[\\\0]/.test(path) || path.split('/').some((part) => !part || part === '.' || part === '..')
+          || path.split('/').at(-1) !== file.name) throw new Error('Invalid relative file path.');
+        if (entries.has(path)) throw new Error(`Duplicate chart file: ${path}`);
+        const bytes = await readLocalFile(file, MAX_SCRAPER_FILE_BYTES, 'Chart file exceeds the 32 MiB import limit.');
+        size += bytes.length;
+        if (size > MAX_ARCHIVE_BYTES) throw new Error('Chart files exceed the 128 MiB import limit.');
+        entries.set(path, bytes);
+      }
+      const { snapshots, warnings } = await importScraperFiles(entries);
+      const report = { name: 'Chart files', count: 0, warnings };
+      for (const snapshot of snapshots) {
+        try {
+          await library.put(snapshot);
+          invalidateCatalogue();
+          report.count += snapshot.charts.length;
+        } catch (error) {
+          results.push({ name: snapshot.name, error: error.message });
+        }
+      }
+      if (report.count) results.push(report);
+    } catch (error) {
+      results.push({ name: 'Chart files', error: error.message });
+    }
+  }
+  if (!results.length) return { status: 'error', body: 'No supported catalogue files found in the selection.' };
   return importReport(results);
 }
 

@@ -4,7 +4,7 @@ A fixed release keeps its own manifest, bundle, catalogue function and Monaco fi
 
 Settings exposes branded manifest URLs under `https://www.peekmosaic.com/addons/<version>/...`. The host project proxies those paths to each fixed release project. Keep the original `https://addons-poc-release-<version>.vercel.app` origins active because published manifests and older installed add-ons still use them directly. A host rebrand does not overwrite or move a release; add a matching proxy rule when publishing a new version. Old installation URLs are normalized to the branded alias only for the Settings display. The stored manifest URL remains unchanged, preserving installation identity.
 
-The current host shows the newest available version per add-on and keeps older unique versions inside an accordion. Release 1.18.1 updates the catalogue, viewer, and editor. Storage remains on 1.17.0. Release 1.18.0 and earlier remain available for existing installs. Local servers remain on localhost. The older 1.15.0 catalogue has a known failure in its plain-text content route; its structured JSON route works. The issue is corrected in 1.16.0. Do not overwrite preserved releases.
+The current host shows the newest available version per add-on and keeps older unique versions inside an accordion. Release 1.19.0 updates the catalogue, viewer, and editor. Storage remains on 1.17.0. Release 1.18.1 and earlier remain available for existing installs. Local servers remain on localhost. The older 1.15.0 catalogue has a known failure in its plain-text content route; its structured JSON route works. The issue is corrected in 1.16.0. Do not overwrite preserved releases.
 
 ## Prepare
 

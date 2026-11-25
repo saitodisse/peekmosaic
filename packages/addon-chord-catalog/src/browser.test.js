@@ -3,6 +3,8 @@ import { validateTabContract } from '@addons-poc/protocol';
 import { createTab, request, setup } from './browser.js';
 import { manifest } from './manifest.js';
 import { createMetadataSearchEntry } from './catalog.js';
+import { chartVersionRecord } from './chart-versions.js';
+import { sha256 } from './source-import.js';
 import { readFile } from 'node:fs/promises';
 
 describe('chord catalogue browser tab', () => {
@@ -20,14 +22,14 @@ describe('chord catalogue browser tab', () => {
       { id: 'certificatePassphrase', group: 'Import from address' },
     ]);
     expect(createTab().fields.find(({ id }) => id === 'archives')).toMatchObject({
-      group: 'Local archives', fileAction: 'import-local', sensitive: true,
+      group: 'Local archives', fileAction: 'import-local', sensitive: true, fileDirectories: true,
     });
     expect(createTab().actions.find(({ id }) => id === 'update').receives).toEqual(['sources', 'certificate', 'certificatePassphrase']);
   });
 });
 
 const stored = vi.hoisted(() => ({
-  list: vi.fn(), summaries: vi.fn(), searchEntries: vi.fn(), getChartsByIds: vi.fn(),
+  list: vi.fn(), summaries: vi.fn(), searchEntries: vi.fn(), getChartsByIds: vi.fn(), getChartVersions: vi.fn(),
   remove: vi.fn(), put: vi.fn(), putArtistRelations: vi.fn(), getArtistRelations: vi.fn(),
   hasArtistRelations: vi.fn(), countArtistRelations: vi.fn(),
 }));
@@ -36,6 +38,76 @@ vi.mock('./library-store.js', () => ({
 }));
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('imports loose pairs by relative path and updates individual versions without losing their siblings', async () => {
+  const principalUrl = 'https://www.cifraclub.com.br/artist/song/';
+  const files = new Map();
+  async function setPair(path, sourceUrl, text, name) {
+    files.set(`${path}.txt`, text);
+    files.set(`${path}.source.json`, JSON.stringify({
+      sourceUrl, title: 'Song', collectedAt: '2026-01-01',
+      artist: { slug: 'artist', name: 'Artist' },
+      chart: { version: { name } },
+      file: { name: `${path.split('/').at(-1)}.txt`, sha256: await sha256(text) },
+    }));
+  }
+  await setPair('artist/main/song', principalUrl, 'C', 'Principal');
+  await setPair('artist/alternate/song', principalUrl + 'simplificada.html', 'D', 'Simplificada');
+  const archiveCopy = {
+    id: 'archive-copy', title: 'Song', sourceId: 'artist-portal-scraper', sourceUrl: principalUrl, collectedAt: '2026-01-01',
+  };
+  const snapshots = new Map();
+  stored.put.mockReset().mockImplementation(async (snapshot) => snapshots.set(snapshot.root, snapshot));
+  stored.searchEntries.mockReset().mockImplementation(async () => [
+    archiveCopy, ...Array.from(snapshots.values()).flatMap(({ charts }) => charts),
+  ].map(createMetadataSearchEntry));
+  vi.stubGlobal('location', { origin: 'http://localhost:5280' });
+  vi.stubGlobal('navigator', {});
+  vi.stubGlobal('fetch', vi.fn(async (url) => new Response(files.get(url.slice(5)))));
+  await setup({ registerService: vi.fn() });
+  const tab = createTab();
+  const run = (paths = [...files.keys()]) => tab.run('import-local', {
+    archives: JSON.stringify(paths.map((path) => ({ name: path.split('/').at(-1), path, url: `blob:${path}` }))),
+  });
+  expect(await run()).toMatchObject({ status: 'success', body: expect.stringContaining('2 charts imported') });
+  const [original, alternative] = snapshots.values();
+  const [firstChart] = original.charts;
+  const result = await request({ url: new URL('./search/chart/song.json', import.meta.url).href });
+  expect(JSON.parse(result.body).metas.map(({ id }) => id)).toEqual([firstChart.id]);
+
+  await setPair('artist/main/song', principalUrl, 'E', 'Principal');
+  expect(await run(['artist/main/song.txt', 'artist/main/song.source.json'])).toMatchObject({ status: 'success' });
+  expect([...snapshots.keys()]).toEqual([original.root, alternative.root]);
+  expect(snapshots.get(alternative.root)).toBe(alternative);
+  expect(snapshots.get(original.root).charts[0]).toMatchObject({ id: firstChart.id, text: 'E' });
+  expect(await run(['artist/main/song.source.json'])).toMatchObject({ status: 'error', body: expect.stringContaining('Missing chart text') });
+  expect(stored.put).toHaveBeenCalledTimes(3);
+});
+
+it('lists a song once under its principal and links both ways to its deduplicated versions', async () => {
+  const sourceUrl = 'https://www.cifraclub.com.br/artist/song/';
+  const principal = { id: 'principal', sourceId: 'artist-portal-scraper', sourceUrl, title: 'Song', text: 'C' };
+  const simple = { ...principal, id: 'simple', sourceUrl: sourceUrl + 'simplificada.html', versionLabel: 'Simplificada' };
+  const oldCopy = { ...simple, id: 'old-simple', collectedAt: '2025-01-01' };
+  const charts = [oldCopy, { ...simple, collectedAt: '2026-01-01' }, principal];
+  stored.searchEntries.mockReset().mockResolvedValue(charts.map(createMetadataSearchEntry));
+  stored.getChartVersions.mockReset().mockResolvedValue(charts.map((chart) => chartVersionRecord(chart, 'archive')));
+  stored.getChartsByIds.mockReset().mockImplementation(async ([id]) => charts.filter((chart) => chart.id === id));
+  vi.stubGlobal('location', { origin: 'http://localhost:5280' });
+  await setup({ registerService: vi.fn() });
+  const payload = async (path) => JSON.parse((await request({ url: new URL(path, import.meta.url).href })).body);
+  expect((await payload('./search/chart/song.json')).metas.map(({ id }) => id)).toEqual(['principal']);
+  const principalUrl = new URL('./text/chart/principal/content.txt', import.meta.url).href;
+  const plainUrl = new URL('./text/chart/simple/content.txt', import.meta.url).href;
+  expect((await payload('./text/chart/principal/content.json')).contentVersions).toEqual([
+    { label: 'Principal', url: principalUrl, current: true },
+    { label: 'Simplificada', url: plainUrl, current: false },
+  ]);
+  expect((await payload('./text/chart/simple/content.json')).contentVersions).toEqual([
+    { label: 'Principal', url: principalUrl, current: false },
+    { label: 'Simplificada', url: plainUrl, current: true },
+  ]);
+});
 
 it('loads a standalone relationship file and links compatible chart pages to the local profile', async () => {
   const dataset = {

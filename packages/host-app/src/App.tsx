@@ -32,6 +32,7 @@ const SEARCH_URL_PARAMS = {
   ranking: parseAsStringLiteral(artistRankings),
   page: parseAsInteger.withDefault(1),
   size: parseAsInteger.withDefault(DEFAULT_SEARCH_PAGE_SIZE),
+  edit: parseAsStringLiteral(['1'] as const),
 };
 
 function normalizeArtistName(value: string): string {
@@ -147,7 +148,8 @@ export function App({ importAddonModule }: AppProps = {}) {
   const [pendingContractUrls, setPendingContractUrls] = useState<string[]>([]);
   const [searchLimits, setSearchLimits] = useState<Record<string, SearchLimitValue>>({});
   const [searchLanguages, setSearchLanguages] = useState<SearchLanguages>({});
-  const [{ q: searchUrlQuery, artist: searchUrlArtist, ranking: searchUrlRanking, page: searchUrlPage, size: searchUrlSize }, setSearchUrl] = useQueryStates(SEARCH_URL_PARAMS, { history: 'push' });
+  const [{ q: searchUrlQuery, artist: searchUrlArtist, ranking: searchUrlRanking, page: searchUrlPage, size: searchUrlSize, edit }, setSearchUrl] =
+    useQueryStates(SEARCH_URL_PARAMS, { history: 'push' });
   const artistRanking = searchUrlArtist.trim() ? searchUrlRanking : null;
   const currentSearchPage = Number.isSafeInteger(searchUrlPage) && searchUrlPage > 0 ? searchUrlPage : 1;
   const currentSearchPageSize = SEARCH_PAGE_SIZES.includes(searchUrlSize as typeof SEARCH_PAGE_SIZES[number])
@@ -197,6 +199,11 @@ export function App({ importAddonModule }: AppProps = {}) {
     void retainInstalledAddons(addons.filter((addon) => addon.status === 'ready').map((addon) => addon.manifestUrl));
   }, [addons]);
   const route = useRoute();
+  const isSearchResultRoute = isResultRoute(route);
+
+  useEffect(() => {
+    if (!isSearchResultRoute && edit) void setSearchUrl({ edit: null }, { history: 'replace' });
+  }, [edit, isSearchResultRoute, setSearchUrl]);
 
   const returnToResults = useCallback(() => {
     setResultToFocus(resultUrlFromRoute(route));
@@ -822,7 +829,6 @@ export function App({ importAddonModule }: AppProps = {}) {
     return manifestUrl ? addons.find((addon) => addon.manifestUrl === manifestUrl) ?? null : null;
   }, [addons, registry]);
   const isAddonRoute = route.startsWith('/addons/');
-  const isSearchResultRoute = isResultRoute(route);
   const artistPageName = route === ROUTES.home ? searchUrlArtist.trim() : '';
   const artistRecommendations = artistPageName
     ? registry.get<ArtistRecommendationsProvider>(ARTIST_RECOMMENDATIONS_SERVICE)
@@ -943,6 +949,8 @@ export function App({ importAddonModule }: AppProps = {}) {
             viewProvider={contentViewProvider}
             viewAddon={contentViewAddon}
             editorProvider={contentEditorProvider}
+            editRequested={edit === '1'}
+            onEditChange={(enabled) => void setSearchUrl({ edit: enabled ? '1' : null })}
           />
         ) : route === ROUTES.home ? null : (
           <section className="addon-route-page" aria-label={selectedAddon ? `Add-on details for ${selectedAddon.manifest.name}` : 'Add-on details'}>

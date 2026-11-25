@@ -20,10 +20,12 @@ export interface AddonTabField {
   placeholder?: string;
   /** Accepted file types when `type` is `file`. */
   accept?: string;
-  /** For a file control, runs this action with a transient JSON list of { name, url } object URLs. */
+  /** For a file control, runs this action with a transient JSON list of { name, url, path? } object URLs. */
   fileAction?: string;
   /** Defaults to allowing several files when a file action is declared. */
   fileMultiple?: boolean;
+  /** Allows selecting or dropping directories and sends each file's relative path. */
+  fileDirectories?: boolean;
   required?: boolean;
   /** Keeps this control out of tab persistence and clears it after an action receives it. */
   sensitive?: boolean;

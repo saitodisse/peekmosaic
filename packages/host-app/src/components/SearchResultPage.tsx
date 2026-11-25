@@ -32,6 +32,8 @@ interface SearchResultPageProps {
   viewAddon?: AddonInstance | null;
   /** Optional provider of an editing view for this result. */
   editorProvider?: ContentEditorProvider;
+  editRequested?: boolean;
+  onEditChange?: (enabled: boolean) => void;
   onBackToResults?: () => void;
   onArtistSearch?: (artist: string) => void;
   previousResultUrl?: string | null;
@@ -110,7 +112,7 @@ function LoadingState({ title }: { title: string }) {
   );
 }
 
-export function SearchResultPage({ contentUrl, result, ready, viewProvider, viewAddon, editorProvider, onBackToResults, onArtistSearch, previousResultUrl, nextResultUrl, fetchResource = fetch }: SearchResultPageProps) {
+export function SearchResultPage({ contentUrl, result, ready, viewProvider, viewAddon, editorProvider, editRequested = false, onEditChange, onBackToResults, onArtistSearch, previousResultUrl, nextResultUrl, fetchResource = fetch }: SearchResultPageProps) {
   const [details, setDetails] = useState<SearchResultDetails | null>(null);
   const [originalText, setOriginalText] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -120,11 +122,10 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
   const [error, setError] = useState<string | null>(null);
   const [editorAvailable, setEditorAvailable] = useState(false);
   const [editorView, setEditorView] = useState<ContentViewResult | null>(null);
-  const [editorLoading, setEditorLoading] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
+  const editing = editRequested && editorAvailable && !loading;
   const [controlsExpanded, setControlsExpanded] = useState(false);
-  const editorRequestNumber = useRef(0);
+  const openedEditor = useRef(false);
   const renderedHeaderRef = useRef<HTMLElement>(null);
   const scrolledContentUrlRef = useRef<string | null>(null);
   const resultRef = useRef(result);
@@ -237,7 +238,7 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
 
   useEffect(() => {
     let active = true;
-    editorRequestNumber.current += 1;
+    openedEditor.current = false;
     addonOwnsView.current = false;
     scrolledContentUrlRef.current = null;
     setDetails(null);
@@ -248,7 +249,6 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
     setEditorAvailable(false);
     setEditorView(null);
     setEditorError(null);
-    setEditing(false);
     setControlsExpanded(false);
 
     if (!ready) return () => { active = false; };
@@ -313,33 +313,32 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
     }
   }
 
-  async function openEditor(): Promise<void> {
-    if (!contentUrl || !editorProvider) return;
-    const requestNumber = ++editorRequestNumber.current;
-    setEditorError(null);
-    setEditorLoading(true);
-    setEditing(true);
-    try {
-      const view = await requestContentEditor(editorProvider, editorRequest(contentUrl));
-      if (requestNumber !== editorRequestNumber.current) return;
-      if (!view) throw new Error('This add-on could not open an editor for this result.');
-      setEditorView(view);
-    } catch (reason) {
-      if (requestNumber === editorRequestNumber.current) setEditorError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      if (requestNumber === editorRequestNumber.current) setEditorLoading(false);
-    }
-  }
+  useEffect(() => {
+    if (!contentUrl) return;
+    let active = true;
 
-  async function closeEditor(): Promise<void> {
-    const requestNumber = ++editorRequestNumber.current;
-    setEditing(false);
-    setEditorView(null);
-    if (contentUrl) {
-      const updated = await loadView(contentUrl);
-      if (requestNumber === editorRequestNumber.current && updated) setRenderedView(updated);
+    if (editing) {
+      openedEditor.current = true;
+      void requestContentEditor(editorProvider, editorRequest(contentUrl))
+        .then((view) => {
+          if (!active) return;
+          if (view) setEditorView(view);
+          else setEditorError('This add-on could not open an editor for this result.');
+        })
+        .catch((reason) => {
+          if (active) setEditorError(reason instanceof Error ? reason.message : String(reason));
+        });
+    } else if (openedEditor.current) {
+      openedEditor.current = false;
+      setEditorView(null);
+      setEditorError(null);
+      void loadView(contentUrl).then((updated) => {
+        if (active && updated) setRenderedView(updated);
+      });
     }
-  }
+
+    return () => { active = false; };
+  }, [contentUrl, editing, editorProvider, editorRequest, loadView]);
 
   const data = details?.body;
   const relationsUrl = httpUrl(data?.artistRelationsUrl);
@@ -347,7 +346,7 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
     ? <ArtistRelations key={relationsUrl} url={relationsUrl} fetchResource={fetchResource} onArtistSearch={onArtistSearch} />
     : null;
   const title = plainTextValue(data?.displaytitle) ?? plainTextValue(data?.title) ?? plainTextValue(data?.id) ?? result?.name ?? 'Article';
-  const renderedTitle = (editing ? editorView?.title : renderedView?.title) ?? result?.name ?? title;
+  const renderedTitle = (editing ? editorView?.title : undefined) ?? renderedView?.title ?? result?.name ?? title;
   const description = textValue(data?.description) ?? result?.description;
   const externalLinks = (Array.isArray(data?.externalLinks) ? data.externalLinks : []).flatMap((link: unknown) => {
     if (!link || typeof link !== 'object') return [];
@@ -356,6 +355,20 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
     const url = httpUrl(item.url);
     return label && url ? [{ label, url }] : [];
   });
+  const versions = (Array.isArray(data?.contentVersions) ? data.contentVersions : []).flatMap((value: unknown) => {
+    if (!value || typeof value !== 'object') return [];
+    const version = value as Record<string, unknown>;
+    const label = textValue(version.label);
+    const url = httpUrl(version.url);
+    return label && url ? [{ label, url, current: version.current === true }] : [];
+  });
+  const versionLinks = versions.length > 1 && (
+    <nav className="host-article-versions" aria-label="Versões da música">
+      {versions.map(({ label, url, current }) => current
+        ? <span key={url} aria-current="page">{label}</span>
+        : <a key={url} href={`#${resultRoute(url)}`}>{label}</a>)}
+    </nav>
+  );
   const contentText = textValue(data?.content?.text);
   const extract = textValue(data?.extract);
   const extractHtml = textValue(data?.extract_html);
@@ -443,12 +456,13 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
                 <ChartPopularity statistics={statistics} />
               </div>
               <div className="host-rendered-header-actions">
+                {versionLinks}
                 {!showReadingStatus && favoriteButton}
                 {externalLinks.map((link) => (
                   <a key={link.url} className="host-rendered-external-link" href={link.url} target="_blank" rel="noopener noreferrer">{link.label} ↗</a>
                 ))}
               {editorAvailable && (
-                <button type="button" className="host-article-edit-button" onClick={() => void (editing ? closeEditor() : openEditor())}>
+                <button type="button" className="host-article-edit-button" onClick={() => onEditChange?.(!editing)}>
                   {editing ? '← Back to reading' : 'Edit'}
                 </button>
               )}
@@ -477,9 +491,9 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
             {!editing && artistRelations}
             <section className="host-article-section">
               {editing
-                ? editorView ? <RenderedHtmlView html={editorView.html} /> : <p role="status">{editorLoading ? 'Opening editor…' : 'Editor unavailable.'}</p>
+                ? editorView ? <RenderedHtmlView html={editorView.html} /> : !editorError && <p role="status">Opening editor…</p>
                 : <RenderedHtmlView html={renderedView.html} />}
-              {editorError && <p role="alert">{editorError}</p>}
+              {editing && editorError && <p role="alert">{editorError}</p>}
             </section>
           </article>
 
@@ -507,6 +521,7 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
             <h1>{title}</h1>
             <ChartPopularity statistics={statistics} />
             {favoriteButton}
+            {versionLinks}
             {description && <p className="host-article-description">{description}</p>}
             {originalArticleUrl && (
               <a className="host-article-original-link" href={originalArticleUrl} target="_blank" rel="noreferrer">
@@ -539,6 +554,7 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
             <span className="host-article-kicker">Compatible content</span>
             <h1>{result?.name ?? title}</h1>
             {favoriteButton}
+            {versionLinks}
             {description && <p className="host-article-description">{description}</p>}
             <a className="host-article-original-link" href={contentUrl ?? '#'} target="_blank" rel="noreferrer">
               Open add-on content ↗

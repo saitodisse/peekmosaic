@@ -139,6 +139,44 @@ describe('persistent source library', () => {
     expect(await store.searchEntries()).toEqual([]);
   });
 
+  it('backfills version relationships and keeps them consistent across source replacements and removals', async () => {
+    const indexedDB = new IDBFactory();
+    const root = 'archive-a';
+    const work = 'cifraclub:artist/song';
+    const sourceUrl = 'https://www.cifraclub.com.br/artist/song/';
+    const principal = { id: 'principal', sourceId: 'artist-portal-scraper', sourceUrl, text: 'C' };
+    const simplified = { ...principal, id: 'simple', sourceUrl: sourceUrl + 'simplificada.html', versionLabel: 'Simplificada' };
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.open(LIBRARY_DATABASE, 9);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        db.createObjectStore('sources', { keyPath: 'root' }).put({ root, chartCount: 1, chunkCount: 1 });
+        const chunks = db.createObjectStore('chunks', { keyPath: ['root', 'index'] });
+        chunks.createIndex('root', 'root');
+        chunks.put({ root, index: 0, charts: [principal] });
+        db.createObjectStore('search', { keyPath: ['root', 'index'] }).createIndex('root', 'root');
+        const locations = db.createObjectStore('locations', { keyPath: ['root', 'index'] });
+        locations.createIndex('root', 'root');
+        locations.createIndex('ids', 'ids', { multiEntry: true });
+        locations.put({ root, index: 0, ids: [principal.id] });
+      };
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => { request.result.close(); resolve(); };
+    });
+    const store = createLibraryStore(indexedDB);
+    await store.put({ root: 'archive-b', charts: [simplified] });
+    expect(await store.getChartVersions(work)).toMatchObject([
+      { id: 'principal', principal: true, label: 'Principal' },
+      { id: 'simple', principal: false, label: 'Simplificada' },
+    ]);
+    expect(await store.getChartsByIds(['principal', 'simple'])).toEqual([principal, simplified]);
+    expect((await store.searchEntries()).map(e => e.version.work)).toEqual([work, work]);
+    await store.put({ root: 'archive-b', charts: [] });
+    expect(await store.getChartVersions(work)).toMatchObject([{ id: 'principal' }]);
+    await store.remove(root);
+    expect(await store.getChartVersions(work)).toEqual([]);
+  });
+
   it('round trips a source spanning multiple blocks, replaces it and deletes all its charts', async () => {
     const store = createLibraryStore(new IDBFactory());
     const snapshot = { root: 'https://example.test/downloads.tar.zst', charts: [

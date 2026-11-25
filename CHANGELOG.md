@@ -4,6 +4,22 @@ This file describes, in reverse order, how the project evolved. The quick read s
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.21.0] - 2026-11-24
+
+### Added
+
+- Import loose scraper TXT and metadata pairs from files or folders. Reimport a version independently of the other versions.
+- Group imported charts under the principal version and link to alternatives directly from the chart header.
+
+### Changed
+
+- Compact the chart layout, expand the editing area, disable editor line wrapping by default and add key and font controls to the preview.
+- Keep edit mode in the URL and publish the updated add-ons as fixed release 1.19.0.
+
+### Fixed
+
+- Filter tablature and its annotations from reading mode. Preserve chord timing, recognize alternate chord notation and join lyric continuations with four spaces.
+
 ## [1.20.1] - 2026-11-22
 
 ### Fixed

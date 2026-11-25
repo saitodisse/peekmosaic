@@ -9,6 +9,8 @@ function collectFromSections(
 
   for (const section of sections) {
     for (const line of section.lines) {
+      if (line.kind !== "chords") continue;
+
       for (const token of line.tokens) {
         if (
           token.kind !== "ChordToken" ||

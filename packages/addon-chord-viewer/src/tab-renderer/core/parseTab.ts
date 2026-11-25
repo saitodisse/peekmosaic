@@ -1,5 +1,5 @@
 // Ported from @achorde/tab-renderer@0.8.5 (MIT). See PROVENANCE.md.
-import { hideTablature } from "./hideTablature";
+import { hideTablature, isTablatureContent } from "./hideTablature";
 import { collectDiagrammableChords } from "./collectDiagrammableChords";
 import {
   logParseDiagnostics,
@@ -8,7 +8,7 @@ import {
   summarizeParsedTab,
 } from "./observe";
 import { parseChordSymbol } from "./parser/parseChordSymbol";
-import { tokenizeRawLine } from "./parser/tokenizeRawLine";
+import { isRiffReference, tokenizeRawLine } from "./parser/tokenizeRawLine";
 import type {
   ParseDiagnostic,
   ParsedTab,
@@ -18,7 +18,7 @@ import type {
   ParsedTabToken,
 } from "./types";
 
-export const TAB_RENDERER_PARSER_VERSION = "2.2.3";
+export const TAB_RENDERER_PARSER_VERSION = "2.2.11";
 export const TAB_RENDERER_AST_VERSION = "2.2.2";
 
 const SECTION_LABEL_RE = /^\s*\[([^\]]+)\](.*)$/;
@@ -83,7 +83,7 @@ function classifyLine(
   ).length;
 
   if (chordCount === 0) {
-    return "lyrics";
+    return isRiffReference(raw.trim()) ? "chords" : "lyrics";
   }
 
   if (chordCount > lyricCount) {
@@ -105,6 +105,11 @@ function isPureSectionHeaderLine(raw: string): boolean {
 function sectionHeaderRemainder(raw: string): string {
   const match = raw.match(SECTION_LABEL_RE);
   return (match?.[2] ?? "").replace(/^\s+/, "");
+}
+
+function isChordOnly(tokens: ParsedTabToken[]): boolean {
+  return tokens.some((token) => token.kind === "ChordToken")
+    && !tokens.some((token) => token.kind === "LyricToken");
 }
 
 function buildLineDiagnostic(
@@ -138,7 +143,7 @@ function buildLineDiagnostic(
 
   if (
     COMMENT_LINE_RE.test(raw) ||
-    COMMENT_PAREN_RE.test(raw) ||
+    (COMMENT_PAREN_RE.test(raw) && !isChordOnly(contentTokens) && !isRiffReference(raw.trim())) ||
     TAB_LINE_RE.test(raw)
   ) {
     return {
@@ -229,16 +234,26 @@ function resolveLineKind(
   return classifyLine(raw, tokens);
 }
 
+function isRiffToken(token: ParsedTabToken): boolean {
+  return token.kind === "DecorationToken" && isRiffReference(token.text);
+}
+
 function pushLine(
   section: ParsedTabSection,
   rawLine: string,
   lineNumber: number,
   diagnostics: ParseDiagnostic[],
+  hideRiffReferences = false,
 ): void {
   const lineOrder = section.lines.length;
-  const tokens = isPureSectionHeaderLine(rawLine)
+  let tokens = isPureSectionHeaderLine(rawLine)
     ? []
     : tokenizeRawLine(rawLine);
+  if (hideRiffReferences && tokens.some(isRiffToken) && !tokens.some((token) => token.kind === "LyricToken")) {
+    rawLine = tokens.map((token) => isRiffToken(token) ? " ".repeat(token.text.length) : token.text).join("");
+    if (!rawLine.trim()) return;
+    tokens = tokenizeRawLine(rawLine);
+  }
   const diagnostic = buildLineDiagnostic(rawLine, tokens, lineNumber);
   const kind = resolveLineKind(rawLine, tokens, diagnostic);
   const line: ParsedTabLine = {
@@ -254,6 +269,48 @@ function pushLine(
   }
 
   section.lines.push(line);
+}
+
+function canJoinLyricLine(raw: string): boolean {
+  return !SECTION_LABEL_RE.test(raw)
+    && !COMMENT_LINE_RE.test(raw)
+    && !COMMENT_PAREN_RE.test(raw)
+    && !isTablatureContent(raw);
+}
+
+function appendLyricContinuation(lyric: ParsedTabLine | undefined, next: string | undefined, lineNumber: number): boolean {
+  if (lyric?.kind !== "lyrics" || !next?.trim()) return false;
+  if (!canJoinLyricLine(lyric.text) || !canJoinLyricLine(next)) return false;
+
+  const tokens = tokenizeRawLine(next);
+  if (classifyLine(next, tokens) !== "lyrics" || buildLineDiagnostic(next, tokens, lineNumber)) return false;
+
+  lyric.text = `${lyric.text.trimEnd()}    ${next.trim()}`;
+  lyric.tokens = tokenizeRawLine(lyric.text);
+  return true;
+}
+
+function joinInstrumentalEntry(lines: string[], index: number) {
+  const instrumental = lines[index].trim();
+  if (!instrumental.startsWith("(") || !instrumental.endsWith(")")) return;
+
+  if (!isChordOnly(tokenizeRawLine(instrumental))) return;
+
+  const entryIndex = lines[index + 1]?.trim() === "" ? index + 2 : index + 1;
+  const entry = lines[entryIndex];
+  const lyrics = lines[entryIndex + 1];
+  if (!entry?.trim() || !lyrics?.trim() || SECTION_LABEL_RE.test(lyrics)) return;
+  if (!tokenizeRawLine(entry).every((token) => token.kind === "ChordToken" || token.kind === "SpaceToken")) return;
+
+  const lyricTokens = tokenizeRawLine(lyrics);
+  if (classifyLine(lyrics, lyricTokens) !== "lyrics" || buildLineDiagnostic(lyrics, lyricTokens, entryIndex + 2)) return;
+
+  const prefix = `${instrumental}   `;
+  return {
+    chords: prefix + entry.trimEnd(),
+    lyrics: " ".repeat(prefix.length) + lyrics,
+    lyricIndex: entryIndex + 1,
+  };
 }
 
 function parseTabInternal(body: string, hideTabs: boolean): ParsedTab {
@@ -291,7 +348,8 @@ function parseTabInternal(body: string, hideTabs: boolean): ParsedTab {
     currentSection = null;
   };
 
-  rawLines.forEach((rawLine, rawIndex) => {
+  for (let rawIndex = 0; rawIndex < rawLines.length; rawIndex++) {
+    const rawLine = rawLines[rawIndex];
     const labelMatch = rawLine.match(SECTION_LABEL_RE);
 
     if (labelMatch) {
@@ -306,20 +364,38 @@ function parseTabInternal(body: string, hideTabs: boolean): ParsedTab {
         lines: [],
       };
 
-      pushLine(currentSection, rawLine, rawIndex + 1, diagnostics);
-      return;
+      const remainder = sectionHeaderRemainder(rawLine);
+      if (isChordOnly(tokenizeRawLine(remainder))) {
+        const titleEnd = rawLine.length - labelMatch[2].length;
+        pushLine(currentSection, rawLine.slice(0, titleEnd), rawIndex + 1, diagnostics);
+        pushLine(currentSection, remainder, rawIndex + 1, diagnostics, hideTabs);
+      } else {
+        pushLine(currentSection, rawLine, rawIndex + 1, diagnostics);
+      }
+      continue;
     }
 
     if (rawLine.trim().length === 0) {
+      if (appendLyricContinuation(currentSection?.lines.at(-1), rawLines[rawIndex + 1], rawIndex + 2)) {
+        rawIndex += 1;
+        continue;
+      }
       if (currentSection?.lines.some((line) => line.kind !== "section-header")) {
         finalizeCurrentSection();
       }
-      return;
+      continue;
     }
 
     const section = ensureCurrentSection();
-    pushLine(section, rawLine, rawIndex + 1, diagnostics);
-  });
+    const joined = joinInstrumentalEntry(rawLines, rawIndex);
+    if (joined) {
+      pushLine(section, joined.chords, rawIndex + 1, diagnostics);
+      pushLine(section, joined.lyrics, joined.lyricIndex + 1, diagnostics);
+      rawIndex = joined.lyricIndex;
+      continue;
+    }
+    pushLine(section, rawLine, rawIndex + 1, diagnostics, hideTabs);
+  }
 
   finalizeCurrentSection();
 

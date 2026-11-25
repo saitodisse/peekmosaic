@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import type { AnchorHTMLAttributes, CSSProperties, MouseEvent, ReactNode } from 'react';
 
 /**
@@ -79,15 +79,18 @@ export function resultUrlFromRoute(route: string): string | null {
   }
 }
 
-/** Observes the current hash and updates on fragment changes. */
+function subscribeRoute(listener: () => void): () => void {
+  window.addEventListener('hashchange', listener);
+  window.addEventListener('popstate', listener);
+  return () => {
+    window.removeEventListener('hashchange', listener);
+    window.removeEventListener('popstate', listener);
+  };
+}
+
+/** Reads the fragment from the same history entry as the query string. */
 export function useRoute(): string {
-  const [route, setRoute] = useState(parseHash);
-  useEffect(() => {
-    const listener = () => setRoute(parseHash());
-    window.addEventListener('hashchange', listener);
-    return () => window.removeEventListener('hashchange', listener);
-  }, []);
-  return route;
+  return useSyncExternalStore(subscribeRoute, parseHash);
 }
 
 /** Navigates to a route by rewriting the URL fragment. */

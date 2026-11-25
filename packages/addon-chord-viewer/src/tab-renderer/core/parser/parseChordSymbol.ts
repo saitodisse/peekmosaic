@@ -38,7 +38,8 @@ export function parseChordSymbol(token: string): ParsedChordSymbol | null {
     return { kind: "repeat", text: token };
   }
 
-  const parts = token.split("/");
+  // Slashes in extensions such as (6/9/11+) do not start a separate suffix or bass.
+  const parts = token.split(/\/(?![^()]*\))/);
   if (parts.length > 2) {
     return null;
   }

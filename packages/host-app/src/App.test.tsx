@@ -206,9 +206,9 @@ describe('App add-on bootstrap', () => {
   });
 
   it.each([
-    ['editor saved before its providers', [editorUrl, viewerUrl, storageUrl]],
-    ['providers saved before the editor', [viewerUrl, storageUrl, editorUrl]],
-  ])('restores the rendered chart and Edit after reload when %s', async (_description, manifestUrls) => {
+    ['editor saved before its providers', [editorUrl, viewerUrl, storageUrl], false],
+    ['providers saved before the editor', [viewerUrl, storageUrl, editorUrl], true],
+  ])('restores the chart and its mode after reload when %s', async (_description, manifestUrls, startsEditing) => {
     const setupOrder: string[] = [];
     const fixtures = createFixtures(setupOrder);
     const manifestFetches = new Map<string, number>();
@@ -235,7 +235,7 @@ describe('App add-on bootstrap', () => {
       searchLimits: {},
       searchLanguages: {},
     }));
-    window.location.hash = resultRoute(chartUrl);
+    window.history.replaceState(null, '', `/?q=rain${startsEditing ? '&edit=1' : ''}#${resultRoute(chartUrl)}`);
     const importAddonModule = async (url: string): Promise<AddonModule> => {
       const httpUrl = new URL(url);
       httpUrl.searchParams.delete('__host_load');
@@ -255,8 +255,18 @@ describe('App add-on bootstrap', () => {
 
     await waitForArticle(container);
     expect(container.querySelector('.host-article-page')?.getAttribute('aria-busy')).toBe('false');
-    expect(container.querySelector('.host-article-card pre')?.textContent).toBe('Am F C G');
-    expect(container.querySelector('.host-article-edit-button')?.textContent).toBe('Edit');
+    const editButton = container.querySelector<HTMLButtonElement>('.host-article-edit-button')!;
+    expect(editButton.textContent).toBe(startsEditing ? '← Back to reading' : 'Edit');
+    expect(container.querySelector(startsEditing ? '.host-article-card textarea' : '.host-article-card pre')?.textContent).toBe('Am F C G');
+
+    await act(async () => { editButton.click(); });
+    await vi.waitFor(() => {
+      const params = new URLSearchParams(window.location.search);
+      expect(params.get('edit')).toBe(startsEditing ? null : '1');
+      expect(params.get('q')).toBe('rain');
+      expect(window.location.hash).toBe(`#${resultRoute(chartUrl)}`);
+    });
+    expect(container.querySelector(startsEditing ? '.host-article-card pre' : '.host-article-card textarea')?.textContent).toBe('Am F C G');
     expect(setupOrder.slice(-2)).toEqual(['viewer', 'editor']);
     expect([...manifestFetches]).toEqual(expect.arrayContaining([
       [editorUrl, 2],
@@ -264,5 +274,21 @@ describe('App add-on bootstrap', () => {
       [storageUrl, 1],
     ]));
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
+    if (startsEditing) {
+      await act(async () => {
+        window.history.replaceState(null, '', '/?q=rain#/');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      expect(container.querySelector('.host-article-page')).toBeNull();
+
+      await act(async () => {
+        window.history.replaceState(null, '', `/?q=rain&edit=1#${resultRoute(chartUrl)}`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await waitForArticle(container);
+      expect(container.querySelector('.host-article-card textarea')?.textContent).toBe('Am F C G');
+      expect(new URLSearchParams(window.location.search).get('edit')).toBe('1');
+    }
   });
 });

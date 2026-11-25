@@ -24,6 +24,7 @@ describe('transposeChordSymbol', () => {
     expect(transposeChordSymbol('Bbmaj7', 2)).toBe('Cmaj7');
     expect(transposeChordSymbol('C7M', 2)).toBe('D7M');
     expect(transposeChordSymbol('F#m7(b5)', 1)).toBe('Gm7(b5)');
+    expect(transposeChordSymbol('F7M(6/9/11+)/A', 2)).toBe('G7M(6/9/11+)/B');
   });
 
   it('keeps repeats and unknown text', () => {
@@ -38,6 +39,21 @@ describe('transposeChordSymbol', () => {
 });
 
 describe('parseTab', () => {
+  it('anchors a parenthesized chord row to the lyric at the original columns', () => {
+    const source = '\u200b(Bb                  Cm)\n\u200bMan to man is so unjust, children\nA second lyric\n(Eb        F)\nAnother lyric';
+    const parsed = parseTab(source);
+    expect(parsed.body).toBe(source);
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.sections[0].lines.map((line) => line.kind)).toEqual([
+      'chords', 'lyrics', 'lyrics', 'chords', 'lyrics',
+    ]);
+    expect(parsed.chordsFound).toEqual(['Bb', 'Cm', 'Eb', 'F']);
+    const bars = prepareSongFromParsedTab(parsed).sections[0].barList;
+    expect(bars.flatMap((bar) => bar.chordItem ? [bar.chordItem.chordPosition] : [])).toEqual([1, 21, 1, 11]);
+    expect(bars.filter((bar) => bar.isChordLineDecoration).map((bar) => bar.decorationText))
+      .toEqual(['(', ')', '(', ')']);
+  });
+
   it('parses leading zero-width markers without losing chord alignment or the original body', () => {
     const source = '\u200bG\n\u200bCalamidade neste dia veio acontecer\n\u200b    Dm\n\u200bNo discurso de um político';
     const parsed = parseTab(source);
@@ -65,7 +81,7 @@ describe('parseTab', () => {
 
   it('classifies the lines and collects the chords of the chart', () => {
     const summary = summarizeParsedTab(parseTab(CHART));
-    expect(summary.parserVersion).toBe('2.2.3');
+    expect(summary.parserVersion).toBe('2.2.11');
     expect(summary.sections).toBe(2);
     expect(summary.sectionTitles).toEqual(['Intro', 'Verse 1']);
     expect(summary.chordsFound).toEqual(['G', 'D/F#', 'Em', 'C']);
@@ -74,7 +90,7 @@ describe('parseTab', () => {
   });
 
   it('keeps lyric words that only start like a chord out of the grammar', () => {
-    const summary = summarizeParsedTab(parseTab('Am7 word\nEu quero ver o sol'));
+    const summary = summarizeParsedTab(parseTab('Am7\nEu quero ver o sol'));
     expect(summary.chordsFound).toEqual(['Am7']);
   });
 
@@ -104,7 +120,7 @@ describe('transposeParsedTab', () => {
 
 describe('prepareSongFromParsedTab', () => {
   it('preserves standalone lyrics between chorded blocks', () => {
-    const text = 'A7      Dm\nNo babado da saia eu vejo\n\nA morena girando a renda\n                       Bb\nÉ prenda pro seu orixá.';
+    const text = 'A7      Dm\nNo babado da saia eu vejo\n\n\nA morena girando a renda\n                       Bb\nÉ prenda pro seu orixá.';
     const parsed = parseTab(text);
     expect(parsed.sections[1].lines[0].kind).toBe('lyrics');
     const prepared = prepareSongFromParsedTab(parsed);

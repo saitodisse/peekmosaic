@@ -1,3 +1,4 @@
+import { LOCAL_SCRAPER_ROOT, sourceCatalogVersion } from './chart-versions.js';
 import { MAX_ARCHIVE_BYTES, readZip } from './zip-source.js';
 import { readTarZstd } from './tar-zstd-source.js';
 import { decryptArchive } from './archive-crypto.js';
@@ -142,6 +143,9 @@ export async function chartsFromRecords(root, manifest, rows) {
       composers: Array.isArray(work.payload.composers) ? work.payload.composers.filter((value) => typeof value === 'string') : [],
       visits: statistics?.allTimeViews ?? 0, updatedAt: row.updatedAt ?? manifest.generatedAt ?? '',
       sourceRoot: root, sourceId: manifest.id, sourceName: manifest.name,
+      versionIdentity: sourceCatalogVersion(
+        JSON.stringify([manifest.id, version.payload.musicalWorkKey]), row.sourceRecordId, version.payload.title,
+      ),
       versionLabel: version.payload.title, instrumentId: version.payload.instrumentId,
       tuningId: version.payload.tuningId,
     });
@@ -254,10 +258,27 @@ async function importScraper(root, files) {
     });
     paired.add(txtPath);
   }
-  if (!charts.length) throw new Error('Archive contains neither a Source Catalog nor scraper .txt + .source.json pairs.');
+  if (!charts.length) throw new Error('No scraper .txt + .source.json pairs found.');
   const unpaired = [...files.keys()].filter((path) => path.endsWith('.txt') && !paired.has(path));
   const warnings = unpaired.length ? [`${unpaired.length} TXT file(s) without .source.json were ignored.`] : [];
   return { root, sourceId: 'artist-portal-scraper', name: `Artist Portal Scraper (${new Set(charts.map((chart) => chart.artist.slug)).size} artists)`, importedAt: new Date().toISOString(), charts, warnings };
+}
+
+/** Store each loose version independently so partial imports keep the rest of the song. */
+export async function importScraperFiles(files) {
+  const { charts, warnings, ...metadata } = await importScraper('', files);
+  const snapshots = await Promise.all(charts.map(async (chart) => {
+    const root = `${LOCAL_SCRAPER_ROOT}${await sha256(chart.sourceUrl)}/`;
+    return {
+      ...metadata, root,
+      name: `${chart.artist.name} — ${chart.title}`,
+      charts: [{
+        ...chart, sourceRoot: root,
+        id: `source:${encodeURIComponent(root)}:scraper:${encodeURIComponent(chart.sourceUrl)}`,
+      }],
+    };
+  }));
+  return { snapshots, warnings };
 }
 
 /** Downloads and converts a complete source before publishing any records locally. */
@@ -302,6 +323,7 @@ export async function importArchive(root, input, credentials = {}, fetchFn = fet
     if (relations.warning) throw new Error(relations.warning);
     if (relations.records) return { root, sourceId: 'artist-portal-scraper', name: 'Artist relationships',
       importedAt: new Date().toISOString(), charts: [], artistRelations: relations.records };
+    throw new Error('Archive contains neither a Source Catalog nor scraper .txt + .source.json pairs.');
   }
   const snapshot = manifests.length
     ? await importCatalogue(root, fetchFn, files, manifests[0].slice(0, -'source-manifest.json'.length))

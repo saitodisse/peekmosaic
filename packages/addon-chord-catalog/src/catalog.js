@@ -1,3 +1,4 @@
+import { chartVersionRecord } from './chart-versions.js';
 /**
  * Pure rules of the chord-chart catalogue: listing, searching, and paging.
  *
@@ -109,7 +110,9 @@ export function createMetadataSearchEntry(chart) {
   const genre = typeof chart.genre === 'string'
     ? chart.genre
     : chart.genre?.name ?? chart.tags?.join(' ') ?? '';
+  const version = chartVersionRecord(chart);
   return {
+    ...(version ? { version } : {}),
     id: chart.id,
     title: chart.title ?? '',
     artist: chart.artist?.name ?? '',

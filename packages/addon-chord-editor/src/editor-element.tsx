@@ -39,9 +39,15 @@ addons-chord-editor { display:block; min-width:0; }
 .chord-editor__notice { margin:0; padding:12px 14px; border:1px solid #cbd5e1; border-radius:8px; background:#1e293b; line-height:1.5; }
 .chord-editor__notice[data-stale="true"] { border-color:#fbbf24; color:#fef3c7; }
 .chord-editor__grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px; }
-.chord-editor__pane { min-width:0; overflow:hidden; border:1px solid #475569; border-radius:10px; background:#0f172a; }
-.chord-editor__pane h2 { margin:0; padding:12px 14px; font-size:15px; color:#e2e8f0; }
-.chord-editor__textarea { box-sizing:border-box; width:100%; min-height:440px; padding:16px; resize:vertical; border:0; background:#111827; color:#f8fafc; font:14px/1.5 ui-monospace,monospace; }
+.chord-editor__pane { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(440px,1fr); min-width:0; overflow:hidden; border:1px solid #475569; border-radius:10px; background:#0f172a; }
+.chord-editor__pane-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 16px; padding:10px 14px; }
+.chord-editor__pane-header h2 { margin:0; font-size:15px; color:#e2e8f0; }
+.chord-editor__preview-controls { display:flex; align-items:center; flex-wrap:wrap; gap:4px 16px; }
+.chord-editor__range { display:flex; align-items:center; gap:8px; font-size:13px; }
+.chord-editor__range input { width:clamp(72px,12vw,112px); min-height:24px; margin:0; }
+.chord-editor__range span { min-width:4ch; font-variant-numeric:tabular-nums; }
+.chord-editor__monaco { contain:size; }
+.chord-editor__textarea { box-sizing:border-box; width:100%; min-height:440px; padding:16px; resize:vertical; border:0; background:#111827; color:#f8fafc; font-family:ui-monospace,monospace; line-height:1.5; }
 .chord-editor__preview { min-height:440px; max-height:65vh; overflow:auto; padding:18px; background:#fff; color:#111827; }
 .chord-editor__actions { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
 .chord-editor__actions button { min-height:40px; padding:0 14px; border:1px solid #a5b4fc; border-radius:8px; background:#4338ca; color:#fff; font:inherit; font-weight:650; cursor:pointer; }
@@ -55,6 +61,24 @@ type MonacoEditor = typeof import('@monaco-editor/react')['default'];
 
 const normalizeText = (text: string) => text.replace(/\r\n?/g, '\n').replace(/^\u200b+/gm, '');
 
+function FontSizeControl({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="chord-editor__range">
+      Font size
+      <input
+        type="range"
+        min={10}
+        max={40}
+        value={value}
+        aria-label={label}
+        aria-valuetext={`${value} px`}
+        onChange={(event) => onChange(event.currentTarget.valueAsNumber)}
+      />
+      <span aria-hidden="true">{value} px</span>
+    </label>
+  );
+}
+
 function EditorSurface({ session }: { session: EditorSession }) {
   const { chart, drafts, viewer } = session;
   const [value, setValue] = useState(() => normalizeText(session.initialText));
@@ -66,6 +90,10 @@ function EditorSurface({ session }: { session: EditorSession }) {
   const [busy, setBusy] = useState(false);
   const [Monaco, setMonaco] = useState<MonacoEditor | null>(null);
   const [monacoFailed, setMonacoFailed] = useState(false);
+  const [editorFontSize, setEditorFontSize] = useState(12);
+  const [previewFontSize, setPreviewFontSize] = useState(14);
+  const [transposeNumber, setTransposeNumber] = useState(0);
+  const transposeOffset = transposeNumber > 0 ? `+${transposeNumber}` : String(transposeNumber);
 
   useEffect(() => {
     let active = true;
@@ -80,12 +108,16 @@ function EditorSurface({ session }: { session: EditorSession }) {
   useEffect(() => {
     let active = true;
     const timer = setTimeout(() => {
-      void Promise.resolve(viewer.render({ text: value, ...(chart.key ? { key: chart.key } : {}) }))
+      void Promise.resolve(viewer.render({
+        text: value,
+        settings: { fontSize: previewFontSize, transposeNumber },
+        ...(chart.key ? { key: chart.key } : {}),
+      }))
         .then((next) => { if (active) { setPreview(next); setPreviewError(''); } })
         .catch((reason) => { if (active) setPreviewError(reason instanceof Error ? reason.message : String(reason)); });
     }, 160);
     return () => { active = false; clearTimeout(timer); };
-  }, [chart.key, value, viewer]);
+  }, [chart.key, previewFontSize, transposeNumber, value, viewer]);
 
   async function save(): Promise<void> {
     setBusy(true);
@@ -123,27 +155,48 @@ function EditorSurface({ session }: { session: EditorSession }) {
       </p>
       <div className="chord-editor__grid">
         <section className="chord-editor__pane" aria-label="Chart text editor">
-          <h2>Chart text</h2>
+          <header className="chord-editor__pane-header">
+            <h2>Chart text</h2>
+            <FontSizeControl label="Chart text font size" value={editorFontSize} onChange={setEditorFontSize} />
+          </header>
           {Monaco ? (
             <Monaco
-              height="440px"
               value={value}
               language="plaintext"
               theme="vs-dark"
               path={`${encodeURIComponent(chart.id)}.txt`}
-              options={{ minimap: { enabled: false }, wordWrap: 'on', fontSize: 14, lineNumbers: 'on', scrollBeyondLastLine: false }}
+              wrapperProps={{ className: 'chord-editor__monaco' }}
+              options={{ minimap: { enabled: false }, wordWrap: 'off', fontSize: editorFontSize, lineNumbers: 'on', scrollBeyondLastLine: false }}
               onChange={(next) => setValue(normalizeText(next ?? ''))}
               keepCurrentModel={false}
             />
           ) : monacoFailed ? (
-            <textarea className="chord-editor__textarea" aria-label="Chart text" spellCheck={false} value={value} onChange={(event) => setValue(normalizeText(event.currentTarget.value))} />
+            <textarea className="chord-editor__textarea" aria-label="Chart text" style={{ fontSize: editorFontSize }} spellCheck={false} value={value} onChange={(event) => setValue(normalizeText(event.currentTarget.value))} />
           ) : (
             <p role="status" className="chord-editor__notice">Loading Monaco editor…</p>
           )}
           {monacoFailed && <p className="chord-editor__notice">Monaco could not load. The plain text editor is available.</p>}
         </section>
         <section className="chord-editor__pane" aria-label="Live chart preview">
-          <h2>Live preview{preview ? ` · ${preview.sections ?? 0} sections · ${preview.diagnostics ?? 0} diagnostics` : ''}</h2>
+          <header className="chord-editor__pane-header">
+            <h2>Live preview{preview ? ` · ${preview.sections ?? 0} sections · ${preview.diagnostics ?? 0} diagnostics` : ''}</h2>
+            <div className="chord-editor__preview-controls">
+              <label className="chord-editor__range">
+                Transpose
+                <input
+                  type="range"
+                  min={-11}
+                  max={11}
+                  value={transposeNumber}
+                  aria-label="Live preview transpose"
+                  aria-valuetext={transposeNumber === 0 ? 'Original key' : `${transposeOffset} semitone${Math.abs(transposeNumber) === 1 ? '' : 's'}`}
+                  onChange={(event) => setTransposeNumber(event.currentTarget.valueAsNumber)}
+                />
+                <span aria-hidden="true">{transposeNumber === 0 ? 'Original' : transposeOffset}</span>
+              </label>
+              <FontSizeControl label="Live preview font size" value={previewFontSize} onChange={setPreviewFontSize} />
+            </div>
+          </header>
           <div className="chord-editor__preview">
             {previewError ? <p role="alert">{previewError}</p> : preview ? <div dangerouslySetInnerHTML={{ __html: preview.html }} /> : <p role="status">Rendering chart…</p>}
           </div>

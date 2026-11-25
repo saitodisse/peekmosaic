@@ -206,7 +206,7 @@ const trafficEntrySchema = object('One HTTP exchange observed by the server.', '
 export const manifest = defineAddonManifest({
   entrypoint: './bundle.js',
   id: 'chord-catalog',
-  version: '1.3.1',
+  version: '1.4.0',
   name: 'Chord Chart Catalogue',
   description: 'Lists, searches and imports chord charts, including locally decrypted private archives.',
   author: 'AC Team',
@@ -275,13 +275,13 @@ export const manifest = defineAddonManifest({
       fields: [
         { id: 'sources', label: 'Source catalogue URLs (one per line)', description: 'Source Catalog roots or ZIP or TAR.ZST archives to refresh manually.', schema: string('One HTTP(S) catalogue root or ZIP, TAR.ZST or encrypted TAR.ZST URL per line.') },
         { id: 'deleteSource', label: 'Downloaded source to delete (URL)', description: 'Source snapshot explicitly selected for deletion.', schema: string('Catalogue root or ZIP, TAR.ZST or encrypted TAR.ZST URL to remove.') },
-        { id: 'archives', label: 'Archive files (.zip, .tar.zst, .tzst)', description: 'Local archives selected on this device and read only during import.', schema: string('JSON list of file names and temporary object URLs.', 'personal') },
+        { id: 'archives', label: 'Archives or chart files (.zip, .tar.zst, .tzst, .txt, .source.json)', description: 'Local archives and scraper files selected on this device and read only during import.', schema: string('JSON list of file names, optional relative paths and temporary object URLs.', 'personal') },
         { id: 'artistRelations', label: 'Relationship dataset (artist-relations.v1.json)', description: 'Imports a relationship dataset independently of the chart archives.', schema: string('JSON with one file name and a temporary object URL.', 'personal') },
         { id: 'certificate', label: 'Local private certificate (.cvcert)', description: 'Encrypted local certificate read into memory only when updating an encrypted source.', schema: string('Certificate JSON held in the current page only.', 'secret') },
         { id: 'certificatePassphrase', label: 'Certificate passphrase', description: 'Passphrase used to unlock the local certificate in the browser only.', schema: string('Local passphrase held in the current page only.', 'secret') },
       ],
       actions: [
-        { id: 'import-local', label: 'Import local archives', description: 'Imports local archives sequentially and reports the result for each file.', receives: ['archives'], returns: payload('Import report.', object('Tab response.', 'public', {})) },
+        { id: 'import-local', label: 'Import local catalogue files', description: 'Imports archives and pairs local chart text with its scraper metadata.', receives: ['archives'], returns: payload('Import report.', object('Tab response.', 'public', {})) },
         { id: 'import-artist-relations', label: 'Import artist relationships', description: 'Replaces the relationship dataset stored on this device.', receives: ['artistRelations'], returns: payload('Import report.', object('Tab response.', 'public', {})) },
         { id: 'update', label: 'Update catalogue', description: 'Downloads snapshots and decrypts encrypted archives in the browser, retaining previous data on failure.', receives: ['sources', 'certificate', 'certificatePassphrase'], returns: payload('Import report.', object('Tab response.', 'public', {})) },
         { id: 'delete', label: 'Delete downloaded source', description: 'Deletes the selected downloaded snapshot from this device.', receives: ['deleteSource'], returns: payload('Deletion report.', object('Tab response.', 'public', {})) },

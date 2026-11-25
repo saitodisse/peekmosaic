@@ -44,5 +44,5 @@ it('cleans leading zero-width markers in editor and preview while preserving ali
   await act(async () => { document.body.innerHTML = editorMarkup(session); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
   expect((document.querySelector('[aria-label="Monaco test"]') as HTMLTextAreaElement).value).toBe('G\nCalamidade\n    Dm\nNo discurso');
-  expect(render).toHaveBeenCalledWith({ text: 'G\nCalamidade\n    Dm\nNo discurso' });
+  expect(render).toHaveBeenCalledWith({ text: 'G\nCalamidade\n    Dm\nNo discurso', settings: { fontSize: 14, transposeNumber: 0 } });
 });

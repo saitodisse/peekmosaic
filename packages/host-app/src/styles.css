@@ -764,6 +764,28 @@ main.host-search-result-page-main {
   align-items: center;
   gap: 8px;
 }
+.host-article-versions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.host-article-versions > * {
+  padding: 4px 7px;
+  border: 1px solid #475569;
+  border-radius: 5px;
+  color: #93c5fd;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.host-article-versions > a { text-decoration: none; }
+.host-article-versions > a:hover { text-decoration: underline; }
+.host-article-versions > [aria-current="page"] {
+  color: #f1f5f9;
+  background: #312e52;
+}
 .host-rendered-external-link, .host-rendered-more > summary {
   color: #a5b4c8;
   font-size: 12px;
@@ -1194,16 +1216,22 @@ main.host-search-result-page-main {
 .host-tab-panel-disclosure:hover { background: #5548dc; }
 .host-tab-panel-disclosure:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 2px; }
 
+/* Keep the chart and its controls at the same scale in reading and editing. */
+body:has(.host-article-page.is-rendered-view [data-tab-root]) .host-site-header,
+main.host-search-result-page-main:has(.host-article-page.is-rendered-view [data-tab-root]) {
+  zoom: 0.75;
+}
+
 /* A large screen becomes a reading stage while retaining the viewer's sizing and colors. */
 @media (min-width: 1500px) {
   body:has(.host-article-page.is-rendered-view [data-tab-root]) .host-site-header {
-    zoom: 1.4;
+    zoom: 1.05;
     background: rgba(12, 17, 38, 0.96) !important;
     border-bottom-color: rgba(167, 139, 250, 0.4) !important;
   }
 
   main.host-search-result-page-main:has(.host-article-page.is-rendered-view [data-tab-root]) {
-    zoom: 2;
+    zoom: 1.5;
     padding: 12px 20px 32px !important;
   }
 

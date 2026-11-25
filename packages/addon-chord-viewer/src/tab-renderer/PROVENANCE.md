@@ -24,6 +24,21 @@ Local behaviour change: `core/parseTab.ts` also ends a section at a blank or
 whitespace-only line after content. The next block has no title unless it starts
 with a bracketed header. Blank lines immediately after a header do not detach it
 from its content. This preserves stanza boundaries in charts without titles.
+When a single blank line separates two lyric lines, `core/parseTab.ts` joins
+them with four spaces. Two or more blank lines still separate blocks.
+Chord-only lines enclosed in parentheses pair with the following lyric and
+keep the chord columns.
+Standalone barlines on chord rows are rendered as decorations.
+Parenthesized instrumental chord groups share the next chord row when it has
+lyrics, whose original offset from the entry chord is preserved. The
+tablature filter recognizes part captions with parenthesized variation names.
+It also hides beat counts and strumming arrows next to tablature diagrams.
+Numbered instrument captions such as `( Violão 1 )` belong to the diagram.
+An explicit tab title bounds the filter so a preceding chord progression stays visible.
+Slashes inside parenthesized chord extensions stay part of the extension.
+Chord-only content on a section title's line becomes the first chord row.
+Numbered riff references on chord rows become decorations and can be hidden
+with the tablature without shifting neighboring chords.
 
 Local fix: `core/renderer/generateBarList.ts` preserves lyric-only lines even
 when the aligned line has neither chord markers nor a legacy chord list.
@@ -112,8 +127,9 @@ outside this `tab-renderer/` directory, and make sure any new ported file keeps 
 provenance comment and the no-`@tonaljs`/no-`node:*` constraint.
 
 Local extension: `hideTablature` defaults to true in the style and parser options.
-The core filter removes string diagrams, including `s` slides, and adjacent tab-specific captions,
-time markers, chords and technique marks, preserving musical section headers and source text.
+The core filter removes string diagrams with or without string labels, including
+`s` slides. It also removes adjacent tab-specific captions, time markers, chords
+and technique marks, preserving musical section headers and source text.
 Passing `{ hideTablature: false }` to `parseTab` restores unfiltered parsing.
 Before parsing, leading U+200B markers are removed and line endings normalized;
 the parsed result retains the original body.

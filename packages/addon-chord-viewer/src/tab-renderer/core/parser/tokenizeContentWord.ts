@@ -91,13 +91,13 @@ function peelDecorationTokens(
 
 /**
  * Expands one whitespace-delimited word into chord, lyric, and decoration tokens.
- * Parentheses that are not part of a chord symbol become DecorationToken.
+ * Standalone barlines and parentheses outside chord symbols become decorations.
  */
 export function tokenizeContentWord(
   text: string,
   startColumn: number,
 ): ParsedTabToken[] {
-  if (text === "(" || text === ")") {
+  if (text === "(" || text === ")" || text === "|") {
     return [decorationToken(text, startColumn)];
   }
 

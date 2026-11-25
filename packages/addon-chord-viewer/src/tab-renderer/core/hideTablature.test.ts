@@ -7,6 +7,28 @@ const VERSE = '[Primeira Parte]\n\n     Em  Em/F#    G\nMeu coração tá batend
 const visible = (text: string) => hideTablature(text).split('\n').filter((line) => line.trim()).join('\n');
 
 describe('hideTablature', () => {
+  it('hides numbered instrument captions inside a tab while retaining the solo progression above its tab title', () => {
+    const solo = '[Solo 1] A  E/G#\n         Bm  G  D  D/E  E';
+    const source = `${solo}\n\n[Tab - Solo 1]\n\n( Violão 1 )\nParte 1 de 2\n${ARM}\n\n(Violão 2)\nParte 2 de 2\n${ARM}\n\n${VERSE}`;
+    expect(visible(source)).toBe(visible(`${solo}\n${VERSE}`));
+  });
+
+  it('hides beat counts between diagrams and after the final diagram', () => {
+    const count = '   1 . . . 2 . . . 1 . . .';
+    const spacedCount = '   2   .   .   .   1   .   .   .   2   .';
+    const source = `[Intro]\n${ARM}\n${count}\n\n   F7M(6/9/11+)\n${ARM}\n${spacedCount}\n\n${VERSE}\n\n[Final] F7M(6/9/11+)`;
+    expect(visible(source)).toBe(visible(`[Intro]\n${VERSE}\n[Final] F7M(6/9/11+)`));
+    expect(parseTab(source).chordsFound).toContain('F7M(6/9/11+)');
+  });
+
+  it('hides strumming arrows and tab repeats while preserving verses between separate tab groups', () => {
+    const tab = 'E|----7-7-7-|\nD|----------| (2x) \nA|----------|\n   ↓  ↓ ↓ ↑ ↓ ↑';
+    const source = `[Tab - Intro]\nParte 1 de 2\n${tab}\n\nParte 2 De 2\n   G/B   D9\n${tab}\n\n${VERSE}\n\n[Tab - Final]\n${tab}`;
+    expect(visible(source)).toBe(visible(VERSE));
+    expect(parseTab(source, { hideTablature: false }).sections.flatMap(({ lines }) => lines.map(({ text }) => text)).join('\n'))
+      .toContain('↓  ↓ ↓ ↑ ↓ ↑');
+  });
+
   it('hides the guitar parts and slides from the reported intro while keeping the verse', () => {
     const source = '[Intro]\n\n(Primeiro Violão)\nE|----4s5--7s9--7--5------------------------| \nB|-------------------5s7--7-7---7s9--9-9----| \nG|------------------------------------------| \nD|------------------------------------------| \nA|------------------------------------------| \nE|------------------------------------------| \n\n(Segundo Violão)\nE|---------12--10--9---9s10--10s12----------| \nB|---9s10-----------------------------------| \nG|------------------------------------------| \nD|------------------------------------------| \nA|------------------------------------------| \nE|------------------------------------------| \n\nA         F#m   D\nPra entender o Ere';
     expect(visible(source)).toBe('[Intro]\nA         F#m   D\nPra entender o Ere');
@@ -31,7 +53,7 @@ describe('hideTablature', () => {
     expect(visible(source)).toBe('Hey! Oh, now\n[Solo]\nEm\nI said that life must be found');
   });
 
-  it.each(['[Solo]', '[Intro]', '[Primeira Parte]', '(Volta ao início)', 'A morena girando a renda', 'Parte da minha vida', 'H.N. na minha vida'])('preserves unrelated text: %s', (line) => {
+  it.each(['[Solo]', '[Intro]', '[Primeira Parte]', '(Volta ao início)', 'A morena girando a renda', 'Parte da minha vida', 'H.N. na minha vida', '| C | G |'])('preserves unrelated text: %s', (line) => {
     expect(visible(`${line}\n\n${ARM}`)).toBe(line);
   });
 
