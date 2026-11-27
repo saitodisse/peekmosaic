@@ -4,6 +4,13 @@ This file describes, in reverse order, how the project evolved. The quick read s
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.23.0] - 2026-11-27
+
+### Added
+
+- Upgrade an installed add-on to its latest available version in one click. Keep its enabled state and search preferences, and retain the previous installation if activation fails.
+- Open saved chart links from older published releases through the upgraded add-on.
+
 ## [1.22.0] - 2026-11-27
 
 ### Added

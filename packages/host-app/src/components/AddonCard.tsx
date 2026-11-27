@@ -9,6 +9,7 @@ import { AddonReleaseDate } from './AddonReleaseDate';
 
 interface AddonCardProps {
   addon: AddonInstance;
+  busy?: boolean;
   onResourcesChanged?: () => void;
   enabled: boolean;
   onToggle: (manifestUrl: string) => void;
@@ -22,11 +23,11 @@ interface AddonCardProps {
   onAcceptContract?: (manifestUrl: string) => void;
 }
 
-export function AddonCard({ addon, onResourcesChanged, enabled, onToggle, onRemove, stateDestination, searchLimit, searchLanguage, onSearchLimitChange, onSearchLanguageChange, reviewRequired = false, onAcceptContract }: AddonCardProps) {
+export function AddonCard({ addon, busy = false, onResourcesChanged, enabled, onToggle, onRemove, stateDestination, searchLimit, searchLanguage, onSearchLimitChange, onSearchLanguageChange, reviewRequired = false, onAcceptContract }: AddonCardProps) {
   const settingsGroups = addon.ui?.settingsGroups ?? ['Settings'];
   const hasSettings = addon.ui?.fields?.some((field) => field.group !== undefined && settingsGroups.includes(field.group));
   const [expanded, setExpanded] = useState(false);
-  const toggleAvailable = !reviewRequired && addon.status !== 'error';
+  const toggleAvailable = !busy && !reviewRequired && addon.status !== 'error';
   const searchTypes = [...new Set((addon.manifest.contract.resources ?? []).filter((resource) => resource.name === 'search').flatMap((resource) => resource.types))];
   const searchLanguages = getSearchLanguages(addon);
   const selectedSearchLanguage = searchLanguages.includes(searchLanguage ?? '') ? searchLanguage! : searchLanguages[0];
@@ -83,7 +84,7 @@ export function AddonCard({ addon, onResourcesChanged, enabled, onToggle, onRemo
             Open page
           </a>
         )}
-        {reviewRequired && onAcceptContract && <button onClick={() => onAcceptContract(addon.manifestUrl)} style={{ padding: '6px 10px', border: '1px solid rgba(251,191,36,0.45)', borderRadius: 6, background: 'rgba(251,191,36,0.12)', color: '#fde68a', cursor: 'pointer', fontSize: 12 }}>Review and enable</button>}
+        {reviewRequired && onAcceptContract && <button disabled={busy} onClick={() => onAcceptContract(addon.manifestUrl)} style={{ padding: '6px 10px', border: '1px solid rgba(251,191,36,0.45)', borderRadius: 6, background: 'rgba(251,191,36,0.12)', color: '#fde68a', cursor: 'pointer', fontSize: 12 }}>Review and enable</button>}
         <button
           disabled
           style={{
@@ -115,6 +116,7 @@ export function AddonCard({ addon, onResourcesChanged, enabled, onToggle, onRemo
           {reviewRequired ? 'Awaiting review' : enabled ? 'Disable' : 'Enable'}
         </button>
         <button
+          disabled={busy}
           onClick={() => onRemove(addon.manifestUrl)}
           style={{
             padding: '6px 10px',

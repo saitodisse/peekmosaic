@@ -22,7 +22,7 @@ describe('available manifest versions', () => {
     const root = createRoot(container);
     const installed = { manifestUrl: 'https://example.test/installed', status: 'ready', manifest: { id: 'viewer', name: 'viewer', description: '', version: '0.9.0', contract: { services: [], state: [] } } } as unknown as AddonInstance;
     await act(async () => {
-      root.render(<AddonManager addons={[installed]} disabledAddonUrls={[]} pendingContractUrls={[]} searchLimits={{}} searchLanguages={{}} onSearchLimitChange={vi.fn()} onSearchLanguageChange={vi.fn()} onInspectManifest={vi.fn()} onInstallFromUrl={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} onAcceptContract={vi.fn()} onFactoryReset={vi.fn()} loading={false} />);
+      root.render(<AddonManager addons={[installed]} disabledAddonUrls={[]} pendingContractUrls={[]} searchLimits={{}} searchLanguages={{}} onSearchLimitChange={vi.fn()} onSearchLanguageChange={vi.fn()} onInspectManifest={vi.fn()} onInstallFromUrl={vi.fn()} onUpgrade={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} onAcceptContract={vi.fn()} onFactoryReset={vi.fn()} loading={false} />);
     });
     const available = container.querySelector('section[aria-label="Available manifests"]')!;
     const viewer = available.querySelector('section[aria-label="viewer"]')!;
@@ -49,7 +49,7 @@ describe('available manifest versions', () => {
       manifest: { id: 'chord-viewer', name: 'Chord Chart Viewer', description: '', version: '1.1.5', contract: { services: [], state: [] } },
     } as unknown as AddonInstance;
     await act(async () => {
-      root.render(<AddonManager addons={[installed]} disabledAddonUrls={[]} pendingContractUrls={[]} searchLimits={{}} searchLanguages={{}} onSearchLimitChange={vi.fn()} onSearchLanguageChange={vi.fn()} onInspectManifest={vi.fn()} onInstallFromUrl={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} onAcceptContract={vi.fn()} onFactoryReset={vi.fn()} loading={false} />);
+      root.render(<AddonManager addons={[installed]} disabledAddonUrls={[]} pendingContractUrls={[]} searchLimits={{}} searchLanguages={{}} onSearchLimitChange={vi.fn()} onSearchLanguageChange={vi.fn()} onInspectManifest={vi.fn()} onInstallFromUrl={vi.fn()} onUpgrade={vi.fn()} onToggle={vi.fn()} onRemove={vi.fn()} onAcceptContract={vi.fn()} onFactoryReset={vi.fn()} loading={false} />);
     });
     const viewer = container.querySelector('section[aria-label="Chord Chart Viewer"]')!;
     const row = [...viewer.querySelectorAll<HTMLElement>('.host-addon-suggestion')]

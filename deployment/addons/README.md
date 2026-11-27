@@ -1,6 +1,6 @@
 # Publishing a fixed add-on release
 
-A fixed release keeps its own manifest, bundle, catalogue function and Monaco files. The host identifies an installation by its manifest URL, so installing a new release creates a separate installation. Remove the old one in Settings when appropriate. A Vercel project owner can still overwrite or delete a release: preserve it by never redeploying to its project or reassigning its domain.
+A fixed release keeps its own manifest, bundle, catalogue function and Monaco files. The host identifies an installation by its manifest URL. In Settings, **Atualizar para v…** accepts the selected release's contract and replaces the previous installation once the new release loads. The host carries over the enabled state and search preferences. A Vercel project owner can still overwrite or delete a release. Preserve it by leaving its deployment and domain in place.
 
 Settings exposes branded manifest URLs under `https://www.peekmosaic.com/addons/<version>/...`. The host project proxies those paths to each fixed release project. Keep the original `https://addons-poc-release-<version>.vercel.app` origins active because published manifests and older installed add-ons still use them directly. A host rebrand does not overwrite or move a release; add a matching proxy rule when publishing a new version. Old installation URLs are normalized to the branded alias only for the Settings display. The stored manifest URL remains unchanged, preserving installation identity.
 

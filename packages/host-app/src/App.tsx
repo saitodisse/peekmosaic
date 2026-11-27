@@ -23,6 +23,8 @@ import type { SearchCollection, SearchLanguages, SearchLimitValue, SearchOrderPr
 import { isFavoriteResultRoute, isResultRoute, manifestUrlFromRoute, navigate, ROUTES, addonRoute, resultUrlFromRoute, useRoute } from './router';
 import { INSTALLATIONS_STORAGE_KEY, resetFactoryStorage } from './factory-reset';
 import { headersToObject, logBrowserHttpExchange } from './http-observability';
+import { isNewerAddonVersion, peekMosaicManifestUrl } from './local-manifest-suggestions';
+import type { LocalManifestSuggestion } from './local-manifest-suggestions';
 
 const SEARCH_STATE_KEY = 'host:search:results:v1';
 const SEARCH_PAGE_SIZES = [5, 10, 25, 50, 100] as const;
@@ -712,6 +714,53 @@ export function App({ importAddonModule }: AppProps = {}) {
     }
   }, [addons, loadRemoteAddon, recheckDependencies, registry]);
 
+  const upgradeAddon = useCallback(async (oldUrl: string, target: LocalManifestSuggestion): Promise<string | undefined> => {
+    const previous = addons.find((addon) => addon.manifestUrl === oldUrl);
+    const { manifestUrl, id, version, contractFingerprint } = target;
+    if (!previous || id !== previous.manifest.id || !version || !contractFingerprint
+      || !isNewerAddonVersion(version, previous.manifest.version)
+      || addons.some((addon) => peekMosaicManifestUrl(addon.manifestUrl) === manifestUrl)) {
+      return 'A atualização não está mais disponível. Recarregue as configurações.';
+    }
+
+    const lifecycle = addonLifecycleRef.current;
+    const wasDisabled = disabledAddonUrls.includes(oldUrl);
+    setLoading(true);
+    try {
+      const upgraded = await createLoader().load(manifestUrl, (manifest) => {
+        if (manifest.id !== id || manifest.version !== version
+          || getInteractionContractFingerprint(manifest.contract) !== contractFingerprint) {
+          throw new Error('O manifesto mudou. Recarregue as configurações e confira a versão antes de atualizar.');
+        }
+      });
+      if (upgraded.status !== 'ready' || lifecycle !== addonLifecycleRef.current) {
+        registry.clearAddon(manifestUrl);
+        return upgraded.error?.message ?? 'Não foi possível ativar a nova versão.';
+      }
+
+      if (wasDisabled) registry.clearAddon(manifestUrl);
+      registry.clearAddon(oldUrl);
+      setAddons((current) => current.map((addon) => addon.manifestUrl === oldUrl ? upgraded : addon));
+      setDisabledAddonUrls((urls) => urls.map((url) => url === oldUrl ? manifestUrl : url));
+      setPendingContractUrls((urls) => urls.filter((url) => url !== oldUrl));
+      setAcceptedContractFingerprints(({ [oldUrl]: _previous, ...current }) => ({ ...current, [manifestUrl]: contractFingerprint }));
+      setSearchLimits(({ [oldUrl]: limit, ...current }) => limit === undefined ? current : { ...current, [manifestUrl]: limit });
+      setSearchLanguages(({ [oldUrl]: language, ...current }) => language === undefined ? current : { ...current, [manifestUrl]: language });
+      refreshResources();
+
+      if (!wasDisabled) {
+        const changedServices = new Set([...previous.services, ...upgraded.services]);
+        const dependents = addons.filter((addon) => addon.manifestUrl !== oldUrl
+          && !disabledAddonUrls.includes(addon.manifestUrl) && !pendingContractUrls.includes(addon.manifestUrl)
+          && addon.manifest.contract.services.some((service) => service.role === 'consumes' && changedServices.has(service.id)));
+        await recheckDependencies(dependents.map((addon) => addon.manifestUrl));
+      }
+      return undefined;
+    } finally {
+      setLoading(false);
+    }
+  }, [addons, createLoader, disabledAddonUrls, pendingContractUrls, recheckDependencies, refreshResources, registry]);
+
   const toggleAddon = useCallback(async (manifestUrl: string) => {
     const addon = addons.find((current) => current.manifestUrl === manifestUrl);
     if (!addon) return;
@@ -936,6 +985,7 @@ export function App({ importAddonModule }: AppProps = {}) {
               onSearchLanguageChange={onSearchLanguageChange}
               onInspectManifest={inspectManifest}
               onInstallFromUrl={installFromUrl}
+              onUpgrade={upgradeAddon}
               onToggle={toggleAddon}
               onRemove={removeAddon}
               onAcceptContract={acceptContract}

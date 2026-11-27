@@ -11,6 +11,7 @@ import * as search from './search';
 import { INSTALLATIONS_STORAGE_KEY } from './factory-reset';
 import * as favorites from './favorites-store';
 import { resultRoute } from './router';
+import { LOCAL_MANIFEST_SUGGESTIONS } from './local-manifest-suggestions';
 
 const chartUrl = 'http://localhost:5295/text/chart/static-and-rain/content.txt';
 const editorUrl = 'https://fixtures.test/chord-editor/manifest.json';
@@ -168,6 +169,58 @@ describe('App add-on bootstrap', () => {
     vi.restoreAllMocks();
     window.history.replaceState(null, '', '/');
     vi.unstubAllGlobals();
+  });
+
+  it('upgrades the suggested add-on in one click and keeps the previous installation on failure', async () => {
+    const latestUrl = LOCAL_MANIFEST_SUGGESTIONS.find(({ manifestUrl }) =>
+      manifestUrl.endsWith('/chord-viewer/manifest.json') || manifestUrl.includes(':5305/'))!.manifestUrl;
+    const services = [service('addons.chords.viewer', 'provides', ['render'])];
+    const old = manifest('chord-viewer', viewerUrl, services);
+    const latest = { ...manifest('chord-viewer', latestUrl, services), version: '1.2.0' };
+    latest.contract.ui.body = 'Updated viewer contract.';
+    const oldFingerprint = getInteractionContractFingerprint(old.contract);
+    let setupFails = true;
+    const importAddonModule = vi.fn(async (url: string) => {
+      if (url.startsWith(old.entrypoint!)) return moduleFor(old, () => {});
+      return moduleFor(latest, () => {
+        if (setupFails) throw new Error('New setup failed.');
+      });
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === viewerUrl) return Response.json(old);
+      if (String(input) === latestUrl) return Response.json(latest);
+      return new Response(null, { status: 404 });
+    }));
+    window.localStorage.setItem(INSTALLATIONS_STORAGE_KEY, JSON.stringify({
+      manifestUrls: [viewerUrl],
+      disabledManifestUrls: [viewerUrl],
+      acceptedContractFingerprints: { [viewerUrl]: oldFingerprint },
+      searchLimits: { [viewerUrl]: 18 },
+      searchLanguages: { [viewerUrl]: 'pt' },
+    }));
+    window.history.replaceState(null, '', '/?q=Tom+Jobim#/settings');
+    await act(async () => root.render(<NuqsAdapter><App importAddonModule={importAddonModule} /></NuqsAdapter>));
+
+    const upgrade = () => container.querySelector<HTMLButtonElement>('button[aria-label="Atualizar para v1.2.0 de chord-viewer"]')!;
+    const installation = () => JSON.parse(window.localStorage.getItem(INSTALLATIONS_STORAGE_KEY)!);
+    expect(upgrade()).not.toBeNull();
+    await act(async () => upgrade().click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('New setup failed.');
+    expect(installation().manifestUrls).toEqual([viewerUrl]);
+    expect(installation().acceptedContractFingerprints).toEqual({ [viewerUrl]: oldFingerprint });
+
+    setupFails = false;
+    await act(async () => upgrade().click());
+    expect(container.querySelector('.host-addon-suggestion [role="status"]')?.textContent).toBe('Atualizado para v1.2.0.');
+    expect(container.querySelector('[aria-label="Review before installation"]')).toBeNull();
+    expect(installation()).toEqual({
+      manifestUrls: [latestUrl],
+      disabledManifestUrls: [latestUrl],
+      acceptedContractFingerprints: { [latestUrl]: getInteractionContractFingerprint(latest.contract) },
+      searchLimits: { [latestUrl]: 18 },
+      searchLanguages: { [latestUrl]: 'pt' },
+    });
+    expect(window.location.search).toBe('?q=Tom+Jobim');
   });
 
   it('clears q on artist click and alphabetizes across provider pages before pagination', async () => {

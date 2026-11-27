@@ -365,6 +365,7 @@ The host rejects a manifest without a contract. It compares provided services, f
 
 - `AddonManifest.contract` and `validateManifest` form the new canonical contract;
 - the host persists the accepted contract fingerprint with its installation configuration;
+- the explicit upgrade action accepts the contract shown for the suggested version. Before loading the new bundle, the host checks that its manifest still has the same add-on ID, version and contract fingerprint;
 - HTTP add-ons record method, origin, route template, purpose, and expected input and output;
 - outgoing HTTP is not yet mediated, so it remains a transparent declaration rather than a technically enforced permission;
 - the change is incompatible with old manifests: they must publish `contract` before installation.

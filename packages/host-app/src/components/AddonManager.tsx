@@ -5,7 +5,7 @@ import { AddonCard } from './AddonCard';
 import { AddonReleaseDate } from './AddonReleaseDate';
 import { AddonContractView } from './AddonContractView';
 import { FactoryResetControl } from './FactoryResetControl';
-import { LOCAL_MANIFEST_SUGGESTIONS, groupManifestSuggestions, loadLocalManifestSuggestions, olderManifestUrls, peekMosaicManifestUrl, prioritizePublishedAddonSuggestions } from '../local-manifest-suggestions';
+import { LOCAL_MANIFEST_SUGGESTIONS, groupManifestSuggestions, isNewerAddonVersion, loadLocalManifestSuggestions, olderManifestUrls, peekMosaicManifestUrl, prioritizePublishedAddonSuggestions } from '../local-manifest-suggestions';
 import type { LocalManifestSuggestion } from '../local-manifest-suggestions';
 import { DEFAULT_SEARCH_LIMIT } from '../search';
 import type { SearchLanguages, SearchLimitValue } from '../search';
@@ -23,6 +23,7 @@ interface AddonManagerProps {
   onSearchLanguageChange: (manifestUrl: string, value: string) => void;
   onInspectManifest: (url: string) => Promise<AddonManifest>;
   onInstallFromUrl: (url: string, acceptedFingerprint: string) => Promise<string | undefined>;
+  onUpgrade: (oldUrl: string, target: LocalManifestSuggestion) => Promise<string | undefined>;
   onToggle: (manifestUrl: string) => Promise<void>;
   onRemove: (manifestUrl: string) => void;
   onAcceptContract: (manifestUrl: string) => Promise<void>;
@@ -35,14 +36,15 @@ interface PendingInstallation {
   manifest: AddonManifest;
 }
 
-export function AddonManager({ addons, onResourcesChanged, disabledAddonUrls, pendingContractUrls, searchLimits, searchLanguages, onSearchLimitChange, onSearchLanguageChange, onInspectManifest, onInstallFromUrl, onToggle, onRemove, onAcceptContract, onFactoryReset, loading }: AddonManagerProps) {
+export function AddonManager({ addons, onResourcesChanged, disabledAddonUrls, pendingContractUrls, searchLimits, searchLanguages, onSearchLimitChange, onSearchLanguageChange, onInspectManifest, onInstallFromUrl, onUpgrade, onToggle, onRemove, onAcceptContract, onFactoryReset, loading }: AddonManagerProps) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pendingInstallation, setPendingInstallation] = useState<PendingInstallation | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const [suggestions, setSuggestions] = useState(LOCAL_MANIFEST_SUGGESTIONS);
+  const [upgrade, setUpgrade] = useState<{ url: string; state: 'running' | 'success' | 'error'; message?: string }>();
   const pendingReviewRef = useRef<HTMLDivElement>(null);
-  const busy = loading || inspecting;
+  const busy = loading || inspecting || upgrade?.state === 'running';
   const installedManifestUrls = new Set(addons.map((addon) => peekMosaicManifestUrl(addon.manifestUrl)));
   const availableSuggestions = prioritizePublishedAddonSuggestions([...suggestions.map((suggestion) => {
     const manifestUrl = peekMosaicManifestUrl(suggestion.manifestUrl);
@@ -134,13 +136,35 @@ export function AddonManager({ addons, onResourcesChanged, disabledAddonUrls, pe
     );
   };
 
+  async function upgradeTo(previous: AddonInstance, target: LocalManifestSuggestion) {
+    setUpgrade({ url: target.manifestUrl, state: 'running' });
+    try {
+      const message = await onUpgrade(previous.manifestUrl, target);
+      setUpgrade({ url: target.manifestUrl, state: message ? 'error' : 'success', message });
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Não foi possível atualizar o add-on.';
+      setUpgrade({ url: target.manifestUrl, state: 'error', message });
+    }
+  }
+
   const renderSuggestion = (suggestion: LocalManifestSuggestion) => {
   const isOpen = pendingInstallation?.manifestUrl === suggestion.manifestUrl;
   const isInstalled = installedManifestUrls.has(suggestion.manifestUrl);
   const installedUrl = addons.find((addon) => peekMosaicManifestUrl(addon.manifestUrl) === suggestion.manifestUrl)?.manifestUrl ?? suggestion.manifestUrl;
   const isDisabled = disabledAddonUrls.includes(installedUrl);
   const isLatest = Boolean(suggestion.id && suggestion.version && parseSemVer(suggestion.version) && !olderUrls.has(suggestion.manifestUrl));
-  const actionLabel = isOpen ? 'Close' : isInstalled ? 'Installed' : 'Install';
+  const version = suggestion.version;
+  const installedOlder = isLatest && !isInstalled && version && suggestion.contractFingerprint
+    ? addons.filter((addon) => addon.manifest.id === suggestion.id && isNewerAddonVersion(version, addon.manifest.version))
+    : [];
+  const enabledOlder = installedOlder.filter((addon) => !disabledAddonUrls.includes(addon.manifestUrl));
+  const upgradeFrom = (enabledOlder.length ? enabledOlder : installedOlder).reduce<AddonInstance | undefined>(
+    (latest, candidate) => !latest || isNewerAddonVersion(candidate.manifest.version, latest.manifest.version) ? candidate : latest,
+    undefined,
+  );
+  const upgradeState = upgrade?.url === suggestion.manifestUrl ? upgrade : undefined;
+  const actionLabel = upgradeState?.state === 'running' ? 'Atualizando…'
+    : isOpen ? 'Close' : isInstalled ? 'Installed' : upgradeFrom ? `Atualizar para v${version}` : 'Install';
   return (
     <Fragment key={suggestion.manifestUrl}>
       <div className="host-addon-suggestion"
@@ -163,6 +187,12 @@ export function AddonManager({ addons, onResourcesChanged, disabledAddonUrls, pe
           </span>
           <span style={{ display: 'block', color: '#94a3b8', fontSize: 12, lineHeight: 1.4, marginBottom: 4 }}>{suggestion.description}</span>
           <code style={{ display: 'block', color: '#cbd5e1', fontSize: 11, overflowWrap: 'anywhere' }}>{suggestion.manifestUrl}</code>
+          {upgradeFrom && <small>
+            Ao atualizar, você aceita o contrato da versão indicada.{' '}
+            <a href={suggestion.manifestUrl} target="_blank" rel="noreferrer">Ver manifesto</a>
+          </small>}
+          {upgradeState?.state === 'success' && <p role="status">Atualizado para v{version}.</p>}
+          {upgradeState?.state === 'error' && <p role="alert">{upgradeState.message}</p>}
         </div>
         <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
           <button
@@ -181,10 +211,11 @@ export function AddonManager({ addons, onResourcesChanged, disabledAddonUrls, pe
                 setPendingInstallation(null);
                 return;
               }
-              void inspectAndReview(suggestion.manifestUrl);
+              if (upgradeFrom) void upgradeTo(upgradeFrom, suggestion);
+              else void inspectAndReview(suggestion.manifestUrl);
             }}
             disabled={busy || isInstalled}
-            aria-label={`${isOpen ? 'Close' : 'Install'} ${suggestion.manifestUrl}`}
+            aria-label={upgradeFrom ? `${actionLabel} de ${suggestion.title}` : `${isOpen ? 'Close' : 'Install'} ${suggestion.manifestUrl}`}
             style={{ padding: '7px 10px', border: 'none', borderRadius: 6, background: isInstalled ? 'rgba(34,197,94,0.1)' : isOpen ? 'rgba(239,68,68,0.12)' : 'linear-gradient(135deg, #8d3be7, #5c1ca9)', color: isInstalled ? '#86efac' : isOpen ? '#fca5a5' : '#fff', cursor: busy ? 'wait' : isInstalled ? 'default' : 'pointer', fontSize: 12, fontWeight: 600, opacity: busy || isInstalled ? 0.6 : 1 }}
           >
             {actionLabel}
@@ -263,6 +294,7 @@ export function AddonManager({ addons, onResourcesChanged, disabledAddonUrls, pe
               <AddonCard
                 key={addon.manifestUrl}
                 addon={addon}
+                busy={busy}
                 onResourcesChanged={onResourcesChanged}
                 enabled={!disabledAddonUrls.includes(addon.manifestUrl)}
                 onToggle={onToggle}
@@ -312,7 +344,7 @@ export function AddonManager({ addons, onResourcesChanged, disabledAddonUrls, pe
         </div>
       </section>
 
-      <FactoryResetControl disabled={loading} onReset={onFactoryReset} />
+      <FactoryResetControl disabled={busy} onReset={onFactoryReset} />
 
     </div>
   );

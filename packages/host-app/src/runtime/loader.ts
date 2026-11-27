@@ -3,6 +3,7 @@ import { assertProvidedService, checkContractCompatibility, createContractServic
 import type { DebugLog } from '@addons-poc/protocol';
 import { ServiceRegistry } from './registry';
 import { analyzeAddonDependencies } from './dependency-graph';
+import { withPublishedResourceAliases, type ResourceClient } from './resource-client';
 
 interface LoggerPort { log(level: 'info' | 'warn' | 'error', message: string): void; }
 
@@ -32,7 +33,10 @@ class HostAPIImpl implements HostAPI {
     if (declaration?.priority !== undefined && priority !== undefined && declaration.priority !== priority) {
       throw new Error(`Mismatched priority for ${serviceId}: manifest ${declaration.priority}, registry ${priority}`);
     }
-    this.registry.register(serviceId, instance, this.addonId, priority, declaration);
+    const service = serviceId === 'host.resource-client' && this.manifest.entrypoint
+      ? withPublishedResourceAliases(instance as ResourceClient, { manifestUrl: this.addonId, entrypoint: this.manifest.entrypoint })
+      : instance;
+    this.registry.register(serviceId, service, this.addonId, priority, declaration);
   }
 
   onUnload(callback: () => void): void { this.unload.push(callback); }
@@ -53,7 +57,7 @@ export class FetchAddonLoader {
 
   constructor(private registry: ServiceRegistry, private logger: LoggerPort, private importFn: (url: string) => Promise<AddonModule> = (url) => import(/* @vite-ignore */ url)) {}
 
-  async load(manifestUrl: string): Promise<AddonInstance> {
+  async load(manifestUrl: string, verifyManifest?: (manifest: AddonManifest) => void): Promise<AddonInstance> {
     let manifest: AddonManifest;
     try {
       const response = await fetch(manifestUrl, { cache: 'no-store' });
@@ -62,6 +66,7 @@ export class FetchAddonLoader {
       const validation = validateManifest(data);
       if (!validation.valid) throw new Error(`Invalid manifest: ${validation.errors.join(', ')}`);
       manifest = data as AddonManifest;
+      verifyManifest?.(manifest);
     } catch (error) {
       this.logger.log('error', `Failed to load manifest: ${(error as Error).message}`);
       return { manifest: null as unknown as AddonManifest, manifestUrl, status: 'error', error: error as Error, services: [] };

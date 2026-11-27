@@ -1,4 +1,5 @@
-import { parseSemVer } from '@addons-poc/protocol';
+import { getInteractionContractFingerprint, parseSemVer, validateManifest } from '@addons-poc/protocol';
+import type { AddonManifest } from '@addons-poc/protocol';
 
 export const LOCAL_MANIFEST_PORTS = [
   5295,
@@ -89,6 +90,17 @@ export interface LocalManifestSuggestion {
   description: string;
   version?: string;
   id?: string;
+  contractFingerprint?: string;
+}
+
+function compareVersions(a: [number, number, number], b: [number, number, number]): number {
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+}
+
+export function isNewerAddonVersion(candidate: string, installed: string): boolean {
+  const next = parseSemVer(candidate);
+  const current = parseSemVer(installed);
+  return Boolean(next && current && compareVersions(next, current) > 0);
 }
 
 /** Keeps add-ons shipped by PeekMosaic ahead of local-only development examples. */
@@ -107,18 +119,16 @@ export function prioritizePublishedAddonSuggestions(
 
 export function olderManifestUrls(suggestions: LocalManifestSuggestion[]): Set<string> {
   const latest = new Map<string, [number, number, number]>();
-  const compare = (a: [number, number, number], b: [number, number, number]) =>
-    a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
   for (const suggestion of suggestions) {
     const version = suggestion.version && parseSemVer(suggestion.version);
     if (!suggestion.id || !version) continue;
     const current = latest.get(suggestion.id);
-    if (!current || compare(version, current) > 0) latest.set(suggestion.id, version);
+    if (!current || compareVersions(version, current) > 0) latest.set(suggestion.id, version);
   }
   return new Set(suggestions.filter((suggestion) => {
     const version = suggestion.version && parseSemVer(suggestion.version);
     const newest = suggestion.id && latest.get(suggestion.id);
-    return version && newest && compare(version, newest) < 0;
+    return version && newest && compareVersions(version, newest) < 0;
   }).map((suggestion) => suggestion.manifestUrl));
 }
 
@@ -144,6 +154,18 @@ function fallbackSuggestion(port: number): LocalManifestSuggestion {
 export const PUBLISHED_MANIFEST_URLS = PUBLISHED_RELEASE_MANIFESTS.flatMap(({ version, addonIds }) =>
   addonIds.map((addonId) => publishedManifestUrl(version, addonId)),
 );
+
+/** Match older branded and fixed-release resource URLs for the same published add-on. */
+export function previousPublishedResourceBases(manifestUrl: string): string[] {
+  const branded = peekMosaicManifestUrl(manifestUrl);
+  if (!PUBLISHED_MANIFEST_URLS.includes(branded)) return [];
+  const [, , version, id] = new URL(branded).pathname.split('/');
+  const previousVersions = PUBLISHED_RELEASE_VERSIONS.slice(0, PUBLISHED_RELEASE_VERSIONS.findIndex((release) => release === version));
+  return previousVersions.flatMap((previous) => [
+    `${PEEKMOSAIC_RELEASES_ORIGIN}/${previous}/${id}/`,
+    `https://addons-poc-release-${previous.replaceAll('.', '-')}.vercel.app/${id}/`,
+  ]);
+}
 
 export function manifestSuggestions(hostname: string): LocalManifestSuggestion[] {
   const local = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
@@ -182,12 +204,16 @@ export async function loadLocalManifestSuggestions(
       const data = await response.json();
       if (!data || typeof data !== 'object') return fallback;
       const record = data as Record<string, unknown>;
+      const contractFingerprint = validateManifest(data).valid
+        ? getInteractionContractFingerprint((data as AddonManifest).contract)
+        : undefined;
       return {
         ...fallback,
         title: textField(record.name) ?? fallback.title,
         description: textField(record.description) ?? fallback.description,
         version: textField(record.version),
         id: textField(record.id),
+        contractFingerprint,
       };
     } catch {
       return fallback;
