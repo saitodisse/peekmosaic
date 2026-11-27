@@ -4,6 +4,21 @@ This file describes, in reverse order, how the project evolved. The quick read s
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.24.0] - 2026-11-27
+
+### Added
+
+- Replay whole charts or individual bars in a dedicated Tab Renderer debug page, with live preview and intermediate rendering data.
+- Copy a chart in the current key and copy or download a JSON diagnosis to replay in the debugger.
+
+### Fixed
+
+- Hide quote-marked beat counts with their tablature.
+
+### Changed
+
+- Publish Chord Chart Viewer 1.3.0 in fixed add-on release 1.21.0.
+
 ## [1.23.0] - 2026-11-27
 
 ### Added

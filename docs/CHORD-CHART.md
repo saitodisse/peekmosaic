@@ -760,8 +760,8 @@ Linhas de tempo como `2:52`, identificações de instrumento como
 `(Primeiro Violão)` e `( Violão 1 )` e indicações de tablatura antes ou depois do bloco também
 são ocultadas. Linhas com slides como `4s5` também desaparecem quando fazem
 parte de uma tablatura.
-Contagens como `1 . . . 2 . . .` e setas de batida são ocultadas entre os
-diagramas e junto às extremidades do bloco.
+Contagens como `1 . . . 2 . . .` ou `1 ‘ ‘ ‘ 2 ‘ ‘ ‘` e setas de batida são
+ocultadas entre os diagramas e junto às extremidades do bloco.
 Desligar a opção volta a mostrar esse conteúdo. O filtro pertence ao
 `tab-renderer` e é aplicado antes da análise de acordes, nos dois layouts.
 
@@ -771,3 +771,21 @@ visualizador e o editor removem esses marcadores ao preparar o texto e aceitam
 quebras de linha LF, CRLF e CR. Os espaços de alinhamento são preservados. O
 texto publicado e seu checksum permanecem originais; um rascunho só é gravado
 quando a pessoa escolhe salvá-lo.
+
+No menu **More** da cifra, **Copiar cifra no tom atual** copia letra e acordes
+em texto simples com a transposição aplicada. **Copiar diagnóstico (JSON)** copia
+o texto original completo, a saída em texto e HTML, as configurações usadas,
+os tons de origem e de destino, os diagnósticos do parser e as etapas de
+análise, transposição e preparação para comparar o resultado com a fonte.
+
+Use **Baixar diagnóstico (.json)** e abra a [página de depuração](https://www.peekmosaic.com/tab-renderer-debug)
+para reproduzir a renderização.
+A página também aceita o JSON colado. É possível trocar entre a cifra
+original e a entrada capturada, editar uma cifra completa ou informar apenas
+as linhas de acordes e letra de um compasso. A prévia e as etapas são
+recalculadas no navegador. O HTML capturado aparece como código para
+comparação.
+
+Para desenvolver o Tab Renderer, rode `pnpm dev:tab-renderer` na raiz e acesse
+`http://localhost:5310/tab-renderer-debug/`. O servidor recompila os arquivos
+ao salvar. Recarregue a página para testar o código recompilado.

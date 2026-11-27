@@ -148,7 +148,7 @@ export const manifest = defineAddonManifest({
     }],
     http: [{
       id: 'chart-content', direction: 'outgoing', method: 'GET',
-      origin: 'https://addons-poc-release-1-20-0.vercel.app', path: '/chord-catalog/text/chart/{id}/content.json',
+      origin: 'https://addons-poc-release-1-21-0.vercel.app', path: '/chord-catalog/text/chart/{id}/content.json',
       purpose: 'Reads the published chart and checksum before local editing.',
       returns: payload('Structured chart payload.', object('Chart payload.')),
     }],

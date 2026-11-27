@@ -82,6 +82,13 @@ describe('hideTablature', () => {
     expect(hideTablature('H.N. . .\nG\nMeu coração')).toBe('H.N. . .\nG\nMeu coração');
   });
 
+  it('keeps quote-marked counts outside diagrams and numbered lyrics next to them', () => {
+    const count = '1 ‘ ‘ ‘ 2 ‘ ‘ ‘';
+    const lyric = '1 ‘palavra’ e 2 ‘versos’';
+    const source = `${count}\n${lyric}\n${ARM}`;
+    expect(visible(source)).toBe(`${count}\n${lyric}`);
+  });
+
   it('defaults to hidden in the parser and restores original text when disabled', () => {
     const source = `[Tab - Solo]\nParte 1 de 1\n  G H.N.\n${ARM}\n\n${VERSE}`;
     const hidden = parseTab(source);

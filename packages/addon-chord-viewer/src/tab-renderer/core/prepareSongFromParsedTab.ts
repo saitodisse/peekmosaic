@@ -70,6 +70,7 @@ export function prepareSongFromParsedTab(
 
   return {
     body: parsed.body,
+    pairedSections: sectionTexts,
     sections: sectionsBarList.map((section) => ({
       title: section.title,
       barList: section.barList,

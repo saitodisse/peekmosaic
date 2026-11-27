@@ -28,3 +28,16 @@ if (catalog.metas.length > 0) {
 }
 await get('/chord-editor/monaco/vs/loader.js');
 console.log('Catalogue route and Monaco loader OK');
+
+const [major, minor] = info.version.split('.').map(Number);
+if (major > 1 || (major === 1 && minor >= 21)) {
+  const page = await (await get('/tab-renderer-debug/index.html')).text();
+  for (const [extension, mime] of [['js', /javascript/], ['css', /text\/css/]]) {
+    const path = `/tab-renderer-debug/debug.${extension}`;
+    const asset = await get(path);
+    if (!page.includes(path) || !mime.test(asset.headers.get('content-type') ?? '')) {
+      throw new Error(`${path}: missing from the debug page or incorrect content type`);
+    }
+  }
+  console.log('Tab Renderer debug page and assets OK');
+}

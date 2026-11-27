@@ -48,6 +48,7 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
+  if (url.origin === self.location.origin && /^\/tab-renderer-debug(?:\/|$)/.test(url.pathname)) return;
   event.respondWith((async () => {
     if (url.origin === self.location.origin) {
       const shell = await caches.open(SHELL);

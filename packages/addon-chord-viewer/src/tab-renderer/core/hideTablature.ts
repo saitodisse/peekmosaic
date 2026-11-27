@@ -7,7 +7,7 @@ const RIFF_CAPTION = /^\s*riff\s+\d+\s*$/i;
 const PART = /^\s*Parte\s+\d+\s+de\s+\d+(?:\s*(?:[-–—].*|\([^)]*\)))?\s*$/i;
 const TECHNIQUES = /^(?:H\.?N\.?|P\.?M\.?|P\.?H\.?|N\.?H\.?|A\.?H\.?|[.·<>~^\-–—])+$/i;
 const TIME_MARKER = /^\s*(?:\d{1,2}:)?[0-5]?\d:[0-5]?\d(?:[.,]\d+)?\s*$/;
-const BEAT_COUNT = /^\s*\d{1,2}(?:\s+[.·]+)+(?:\s+\d{1,2}(?:\s+[.·]+)+)+\s*$/;
+const BEAT_COUNT = /^\s*\d{1,2}(?:\s+[.·'‘’]+)+(?:\s+\d{1,2}(?:\s+[.·'‘’]+)+)+\s*$/;
 const STRUMMING_ARROWS = /^\s*[↑↓](?:\s*[↑↓])*\s*$/;
 
 function isTabMetadata(line: string): boolean {

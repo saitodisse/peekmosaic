@@ -14,7 +14,7 @@ import {
   type ViewerSettings,
 } from './settings';
 import { createViewerState, type ViewerState } from './state';
-import { CONTENT_VIEW_SERVICE, ChartContentViewProvider } from './content-view';
+import { CONTENT_VIEW_SERVICE, ChartContentViewProvider, type ContentViewResponse } from './content-view';
 import { CATALOG_FIELD, CHART_FIELD, TAB_ACTIONS, TAB_FIELDS, TEXT_FIELD } from './tab-definition';
 
 interface DraftLookup {
@@ -55,7 +55,7 @@ const catalogDefault = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(bundl
   ? 'http://localhost:5295'
   : DEFAULT_CATALOG_ORIGIN;
 
-type TabResponse = AddonTabResult & { view?: { kind: 'text' } | { kind: 'html'; html: string } };
+type TabResponse = AddonTabResult & { view?: { kind: 'text' } | ({ kind: 'html' } & Pick<ContentViewResponse, 'html' | 'clipboard'>) };
 
 const WELCOME = [
   'No chart is loaded yet.',
@@ -167,6 +167,7 @@ export function createTab(host: HostAPI): AddonTab {
     const text = sourceText(chart, settings);
     const rendered = service.render({
       text,
+      clipboardSource: chart.text,
       settings,
       ...(chart.key ? { key: chart.key } : {}),
     });
@@ -192,7 +193,7 @@ export function createTab(host: HostAPI): AddonTab {
       title: note ?? `${chart.title} — ${chart.artist}`,
       body,
       items,
-      view: { kind: 'html', html: rendered.html },
+      view: { kind: 'html', html: rendered.html, clipboard: rendered.clipboard },
       // The panel follows the settings this add-on really used.
       values: settingsToValues(settings),
     };

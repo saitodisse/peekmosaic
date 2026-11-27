@@ -1,5 +1,5 @@
 // Ported from @achorde/tab-renderer@0.8.5 (MIT). See PROVENANCE.md.
-import type { BarsList, BarsListItem } from "./parser/types";
+import type { BarsList, BarsListItem, SectionText } from "./parser/types";
 
 export type { BarsListItem, ChordItem, SimpleChord } from "./parser/types";
 
@@ -13,6 +13,7 @@ export type PreparedSection = {
 
 export type PreparedSong = {
   body: string;
+  pairedSections: SectionText[];
   sections: PreparedSection[];
 };
 

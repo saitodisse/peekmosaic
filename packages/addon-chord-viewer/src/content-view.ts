@@ -8,7 +8,7 @@
  */
 import { CatalogClient, type ChartRecord } from './catalog-client';
 import { simplifyChartText } from './chart-transform';
-import { renderChart } from './render-chart';
+import { renderChart, type ChartClipboard } from './render-chart';
 import type { ViewerSettings } from './settings';
 
 export const CONTENT_VIEW_SERVICE = 'host.content-view';
@@ -24,6 +24,7 @@ export interface ContentViewRequest {
 export interface ContentViewResponse {
   html: string;
   title?: string;
+  clipboard?: ChartClipboard;
 }
 
 export interface ChartContentViewOptions {
@@ -51,7 +52,7 @@ interface CachedChart {
 /** Rendered view of one chart, kept while the controls do not change. */
 interface CachedRender {
   signature: string;
-  html: string;
+  view: ContentViewResponse;
 }
 
 export class ChartContentViewProvider {
@@ -100,15 +101,20 @@ export class ChartContentViewProvider {
     if (this.lastRender?.signature !== signature) {
       const rendered = renderChart({
         text: settings.simplifyChords ? simplifyChartText(chart.text) : chart.text,
+        clipboardSource: chart.text,
         settings,
         ...(chart.key ? { key: chart.key } : {}),
       });
-      this.lastRender = { signature, html: rendered.html };
+      this.lastRender = {
+        signature,
+        view: {
+          html: rendered.html,
+          ...(entry.title ? { title: entry.title } : {}),
+          ...(rendered.clipboard ? { clipboard: rendered.clipboard } : {}),
+        },
+      };
     }
 
-    return {
-      html: this.lastRender.html,
-      ...(entry.title ? { title: entry.title } : {}),
-    };
+    return this.lastRender.view;
   }
 }

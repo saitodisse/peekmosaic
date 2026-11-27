@@ -1,4 +1,5 @@
 import type { AddonTabAction, AddonTabField, AddonTabResult } from '@addons-poc/protocol';
+import type { ContentViewClipboard } from './content-view';
 
 /**
  * Rendered view of a tab response.
@@ -9,7 +10,7 @@ import type { AddonTabAction, AddonTabField, AddonTabResult } from '@addons-poc/
  * responses with the published package. Delete this declaration when the
  * package is republished with `AddonTabView`.
  */
-export type TabResponseView = { kind: 'text' } | { kind: 'html'; html: string };
+export type TabResponseView = { kind: 'text' } | { kind: 'html'; html: string; clipboard?: ContentViewClipboard };
 
 export interface TabResponse extends AddonTabResult {
   view?: TabResponseView;

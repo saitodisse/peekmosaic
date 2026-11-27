@@ -796,6 +796,7 @@ main.host-search-result-page-main {
 .host-rendered-more { position: relative; }
 .host-rendered-more .host-article-links {
   position: absolute;
+  flex-direction: column;
   z-index: 5;
   right: 0;
   width: max-content;

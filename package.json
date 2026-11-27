@@ -1,12 +1,13 @@
 {
   "name": "peekmosaic",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "private": true,
   "scripts": {
     "test": "pnpm check:host-boundary && pnpm run build:protocol && pnpm -r --filter './packages/**' test && node --test deployment/addons/release.test.mjs",
     "check:host-boundary": "node scripts/check-host-boundary.mjs",
     "dev": "pnpm run build:protocol && node scripts/dev-all.mjs --open",
     "dev:host": "pnpm --filter @addons/host-app dev",
+    "dev:tab-renderer": "node scripts/build-tab-renderer-debug.mjs",
     "dev:addons": "pnpm run build:protocol && pnpm -r --parallel --filter './packages/addon-chord-*' serve",
     "kill-all": "node scripts/kill-all.mjs",
     "build:protocol": "pnpm --filter @addons-poc/protocol run clean && pnpm --filter @addons-poc/protocol run build",

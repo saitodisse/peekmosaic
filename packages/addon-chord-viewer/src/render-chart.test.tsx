@@ -8,6 +8,44 @@ const CHART = [
 ].join('\n');
 
 describe('renderChart', () => {
+  it('exports the current chord text and the stages used to produce the HTML', () => {
+    const source = '[Intro] B  D/F#\n\n[Tab - Intro]\nE|-2--|\n\n[Verse]\nB   D/F#\nA palavra continua';
+    const output = renderChart({ text: source, clipboardSource: source, settings: { transposeNumber: 1 }, key: 'B' });
+    const clipboard = output.clipboard!;
+
+    expect(clipboard.currentText()).toBe('[Intro]\nC  Eb/G\n\n[Verse]\nC   Eb/G\nA palavra continua');
+    expect(clipboard.diagnostics()).toMatchObject({
+      source,
+      parserInput: source,
+      settings: { transposeNumber: 1, hideTablature: true },
+      keys: { original: 'B', current: 'C', inferred: false },
+      parsed: { sections: [{ title: 'Intro' }, { title: 'Verse' }], diagnostics: [] },
+      transposed: { chordsFound: ['C', 'Eb/G'] },
+      prepared: [{ title: 'Intro' }, { title: 'Verse' }],
+    });
+    expect(output.html).toContain('Eb/G');
+  });
+
+  it.each(['e', 'o'] as const)('hides quote-marked beat counts with their tablature in layout %s', (viewMode) => {
+    const count = '\u200b   1 ‘ ‘ ‘ 2 ‘ ‘ ‘';
+    const intro = ['[Intro] Gm7(9)  Dm7', '        Bbm6  Dm7'];
+    const verse = ['[Primeira Parte]', ' Dm7           Bº', 'Vai minha tristeza'];
+    const text = [
+      ...intro, '', '[Tab - Intro]', '',
+      'Parte 1 de 2', '   Gm7(9)    Dm7', 'E|-5---5-----|', 'B|-6---6---6-|', count, '',
+      'Parte 2 de 2', '   Dm7       Bº', 'E|----------|', 'B|-6-----6--|', count, '',
+      ...verse,
+    ].join('\n');
+    const settings = { viewMode };
+
+    expect(renderChart({ text, settings }).html).toBe(renderChart({
+      text: [...intro, '', ...verse].join('\n'),
+      settings,
+    }).html);
+    expect(renderChart({ text, settings: { ...settings, hideTablature: false } }).html)
+      .toContain('‘');
+  });
+
   it.each(['e', 'o'] as const)('renders chords and barlines in an instrumental intro in layout %s', (viewMode) => {
     const text = [
       '\u200b| C   | C   | Bb F | F   |',

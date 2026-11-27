@@ -28,11 +28,25 @@ export interface ContentViewRequest {
 export interface ContentViewResult {
   html: string;
   title?: string;
+  clipboard?: ContentViewClipboard;
+}
+
+export interface ContentViewClipboard {
+  currentText(): string;
+  diagnostics(): object;
+}
+
+export function readViewClipboard(value: unknown): ContentViewClipboard | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const clipboard = (value as { clipboard?: Partial<ContentViewClipboard> }).clipboard;
+  return typeof clipboard?.currentText === 'function' && typeof clipboard.diagnostics === 'function'
+    ? clipboard as ContentViewClipboard
+    : undefined;
 }
 
 export interface ContentViewProvider {
-  render(request: ContentViewRequest): Promise<{ html?: string; title?: string } | undefined | null>
-    | { html?: string; title?: string } | undefined | null;
+  render(request: ContentViewRequest): Promise<Partial<ContentViewResult> | undefined | null>
+    | Partial<ContentViewResult> | undefined | null;
 }
 
 /**
@@ -51,7 +65,8 @@ export async function requestContentView(
     const html = typeof result?.html === 'string' ? result.html.trim() : '';
     if (!html) return undefined;
     const title = typeof result?.title === 'string' ? result.title.trim() : '';
-    return { html, ...(title ? { title } : {}) };
+    const clipboard = readViewClipboard(result);
+    return { html, ...(title ? { title } : {}), ...(clipboard ? { clipboard } : {}) };
   } catch {
     return undefined;
   }

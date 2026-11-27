@@ -122,6 +122,61 @@ describe('SearchResultPage', () => {
     expect(container.querySelector('[role="status"]')).toBeNull();
   });
 
+  it('copies the original body separately and uses the current view for text and JSON', async () => {
+    const original = '  A\r\nPrimeiro verso\r\n';
+    const writeText = vi.fn(async (_text: string) => undefined);
+    const clipboardSpy = vi.spyOn(window, 'navigator', 'get');
+    clipboardSpy.mockReturnValue(Object.assign(Object.create(window.navigator), { clipboard: { writeText } }));
+    const view = (chord: string) => ({
+      html: `<pre>${chord}</pre>`,
+      clipboard: { currentText: () => chord, diagnostics: () => ({ keys: { current: chord } }) },
+    });
+    const provider: ContentViewProvider = { render: () => view('A') };
+    const pendingSource = deferred<Response>();
+    const fetchResource: typeof fetch = async (url) => String(url) === chartUrl
+      ? pendingSource.promise
+      : Response.json({});
+    const addon = {
+      manifest: { id: 'chord-viewer', version: '1.2.1', contract: { ui: { fields: [], actions: [{ id: 'apply', receives: [] }] } } },
+      ui: {
+        title: 'Viewer',
+        fields: [{ id: 'transposeNumber', label: 'Transpose', type: 'range', min: -6, max: 6 }],
+        actions: [{ id: 'apply', label: 'Apply', live: true, receives: ['transposeNumber'] }],
+        run: async () => ({ status: 'success', body: '', view: { kind: 'html', ...view('Bb') } }),
+      },
+    } as unknown as AddonInstance;
+    const button = (label: string) => [...container.querySelectorAll<HTMLButtonElement>('.host-rendered-more button')]
+      .find((item) => item.textContent === label)!;
+
+    try {
+      await act(async () => root.render(<SearchResultPage contentUrl={chartUrl} result={chart} ready viewProvider={provider} viewAddon={addon} fetchResource={fetchResource} />));
+      expect(button('Copiar diagnóstico (JSON)').disabled).toBe(true);
+      await act(async () => button('Copiar cifra no tom atual').click());
+      expect(writeText).toHaveBeenLastCalledWith('A');
+
+      await act(async () => pendingSource.resolve(new Response(original)));
+      await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: ']' })));
+      expect(container.querySelector('.host-article-section pre')?.textContent).toBe('Bb');
+      await act(async () => button('Copiar cifra original').click());
+      expect(writeText).toHaveBeenLastCalledWith(original);
+      await act(async () => button('Copiar cifra no tom atual').click());
+      expect(writeText).toHaveBeenLastCalledWith('Bb');
+      await act(async () => button('Copiar diagnóstico (JSON)').click());
+      expect(JSON.parse(writeText.mock.lastCall![0])).toEqual({
+        schemaVersion: 1,
+        chart: { title: chart.name, contentUrl: chartUrl },
+        renderer: { id: 'chord-viewer', version: '1.2.1' },
+        original,
+        rendered: { text: 'Bb', html: '<pre>Bb</pre>' },
+        diagnostics: { keys: { current: 'Bb' } },
+      });
+      expect(container.querySelector('.host-rendered-more [role="status"]')?.textContent)
+        .toBe('Diagnóstico de renderização copiado.');
+    } finally {
+      clipboardSpy.mockRestore();
+    }
+  });
+
   it('keeps the current reading values in the header and updates them through keyboard shortcuts', async () => {
     const statusTarget = document.createElement('div');
     statusTarget.id = 'host-reading-status';

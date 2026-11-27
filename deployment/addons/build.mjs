@@ -2,6 +2,7 @@ import { build } from 'esbuild';
 import { mkdir, cp, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+import { buildTabRendererDebug } from '../../scripts/build-tab-renderer-debug.mjs';
 const root = resolve('../..');
 const origin = process.env.ADDONS_RELEASE_ORIGIN;
 const output = process.env.ADDONS_OUTPUT_DIR;
@@ -15,5 +16,6 @@ for (const name of ['chord-editor', 'chord-viewer', 'storage-local', 'chord-cata
   await writeFile(resolve(dir, 'manifest.json'), JSON.stringify({ ...manifest, entrypoint: `${origin}/${name}/bundle.js` }, null, 2));
 }
 await cp(resolve(root, 'packages/addon-chord-editor/node_modules/monaco-editor/min/vs'), resolve(output, 'chord-editor/monaco/vs'), { recursive: true });
+await buildTabRendererDebug(output);
 
 process.exit(0);

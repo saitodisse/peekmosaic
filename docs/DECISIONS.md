@@ -489,12 +489,17 @@ The host asks a service declared **by convention**, exactly as it already asks
 
 ```text
 id:     host.content-view
-method: render({ url, type, name }) -> { html, title? }
+method: render({ url, type, name }) -> { html, title?, clipboard? }
 ```
 
 Any active add-on may provide it. The internal registry decides which provider
 wins, by the usual priority rule. The provider receives the content URL of the
 result and either returns HTML or returns nothing.
+
+An in-process provider may supply the optional `clipboard` callbacks
+`currentText()` and `diagnostics()` alongside the HTML. The host calls them
+when the user requests a copy. A live tab action can return the same callbacks
+with its HTML so copying follows the controls in use.
 
 The service name lives under the `host.` namespace so it satisfies the namespaced
 identifier rule of contract v1 without changing the published protocol package.

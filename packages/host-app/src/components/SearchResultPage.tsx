@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { requestContentView, type ContentViewProvider, type ContentViewResult } from '../content-view';
+import { readViewClipboard, requestContentView, type ContentViewProvider, type ContentViewResult } from '../content-view';
 import { requestContentEditor, supportsContentEditor, type ContentEditorProvider } from '../content-editor';
 import type { AddonInstance } from '@addons-poc/protocol';
 import { AddonControlPanel } from './AddonControlPanel';
@@ -115,7 +115,7 @@ function LoadingState({ title }: { title: string }) {
 
 export function SearchResultPage({ contentUrl, result, ready, viewProvider, viewAddon, editorProvider, editRequested = false, onEditChange, onBackToResults, fromFavorites = false, onArtistSearch, previousResultUrl, nextResultUrl, fetchResource = fetch }: SearchResultPageProps) {
   const [details, setDetails] = useState<SearchResultDetails | null>(null);
-  const [originalText, setOriginalText] = useState<string | null>(null);
+  const [originalText, setOriginalText] = useState<string | null | undefined>(undefined);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [fallbackContent, setFallbackContent] = useState<string | null>(null);
   const [renderedView, setRenderedView] = useState<ContentViewResult | null>(null);
@@ -165,7 +165,12 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
       if (!addonOwnsView.current) return;
       const html = renderedHtml(response);
       if (!html) return;
-      setRenderedView((current) => ({ html, ...(current?.title ? { title: current.title } : {}) }));
+      const clipboard = readViewClipboard(response.view);
+      setRenderedView((current) => ({
+        html,
+        ...(current?.title ? { title: current.title } : {}),
+        ...(clipboard ? { clipboard } : {}),
+      }));
     },
   });
   const viewerFields = new Map((viewAddon?.ui?.fields ?? []).map((field) => [field.id, field]));
@@ -243,6 +248,8 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
     addonOwnsView.current = false;
     scrolledContentUrlRef.current = null;
     setDetails(null);
+    setOriginalText(undefined);
+    setCopyStatus(null);
     setFallbackContent(null);
     setRenderedView(null);
     setError(null);
@@ -304,13 +311,13 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
     };
   }, [contentUrl, editorProvider, editorRequest, fetchResource, loadView, ready]);
 
-  async function copyOriginalText(): Promise<void> {
-    if (originalText === null || !navigator.clipboard?.writeText) return;
+  async function copyChart(getText: () => string, success: string): Promise<void> {
+    setCopyStatus(null);
     try {
-      await navigator.clipboard.writeText(originalText);
-      setCopyStatus('Cifra original copiada.');
+      await navigator.clipboard.writeText(getText());
+      setCopyStatus(success);
     } catch {
-      setCopyStatus('Não foi possível copiar a cifra.');
+      setCopyStatus('Não foi possível copiar para a área de transferência.');
     }
   }
 
@@ -348,6 +355,36 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
     : null;
   const title = plainTextValue(data?.displaytitle) ?? plainTextValue(data?.title) ?? plainTextValue(data?.id) ?? result?.name ?? 'Article';
   const renderedTitle = (editing ? editorView?.title : undefined) ?? renderedView?.title ?? result?.name ?? title;
+  const clipboard = editing ? undefined : renderedView?.clipboard;
+
+  function renderDiagnosticsJson(): string {
+    if (!renderedView || !clipboard || typeof originalText !== 'string') {
+      throw new Error('O diagnóstico ainda está indisponível.');
+    }
+    return JSON.stringify({
+      schemaVersion: 1,
+      chart: { title: renderedTitle, contentUrl },
+      renderer: viewAddon ? { id: viewAddon.manifest.id, version: viewAddon.manifest.version } : undefined,
+      original: originalText,
+      rendered: { text: clipboard.currentText(), html: renderedView.html },
+      diagnostics: clipboard.diagnostics(),
+    }, null, 2);
+  }
+
+  function downloadDiagnostics() {
+    try {
+      const url = URL.createObjectURL(new Blob([renderDiagnosticsJson()], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'peekmosaic-tab-renderer.json';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setCopyStatus('Arquivo de diagnóstico gerado.');
+    } catch {
+      setCopyStatus('Não foi possível gerar o arquivo de diagnóstico.');
+    }
+  }
+
   const description = textValue(data?.description) ?? result?.description;
   const externalLinks = (Array.isArray(data?.externalLinks) ? data.externalLinks : []).flatMap((link: unknown) => {
     if (!link || typeof link !== 'object') return [];
@@ -470,20 +507,55 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
               <details className="host-rendered-more">
                 <summary>More</summary>
                 <div className="host-article-links">
-                <button
-                  type="button"
-                  className="host-article-original-link"
-                  disabled={originalText === null}
-                  onClick={() => void copyOriginalText()}
-                >
-                  {originalText === null ? 'Carregando cifra original…' : 'Copiar cifra original'}
-                </button>
-                {copyStatus && <span role="status">{copyStatus}</span>}
-                {contentUrl && (
-                  <a className="host-article-original-link" href={contentUrl} target="_blank" rel="noreferrer">
-                    Open the content URL ↗
-                  </a>
-                )}
+                  <button
+                    type="button"
+                    className="host-article-original-link"
+                    disabled={typeof originalText !== 'string'}
+                    onClick={() => {
+                      if (typeof originalText === 'string') void copyChart(() => originalText, 'Cifra original copiada.');
+                    }}
+                  >
+                    {originalText === undefined ? 'Carregando cifra original…' : originalText === null ? 'Cifra original indisponível' : 'Copiar cifra original'}
+                  </button>
+                  {clipboard && <>
+                    <button
+                      type="button"
+                      className="host-article-original-link"
+                      onClick={() => void copyChart(() => clipboard.currentText(), 'Cifra no tom atual copiada.')}
+                    >
+                      Copiar cifra no tom atual
+                    </button>
+                    <button
+                      type="button"
+                      className="host-article-original-link"
+                      disabled={typeof originalText !== 'string'}
+                      onClick={() => void copyChart(renderDiagnosticsJson, 'Diagnóstico de renderização copiado.')}
+                    >
+                      Copiar diagnóstico (JSON)
+                    </button>
+                    <button
+                      type="button"
+                      className="host-article-original-link"
+                      disabled={typeof originalText !== 'string'}
+                      onClick={downloadDiagnostics}
+                    >
+                      Baixar diagnóstico (.json)
+                    </button>
+                    <a
+                      className="host-article-original-link"
+                      href={import.meta.env.DEV ? 'http://localhost:5310/tab-renderer-debug/' : '/tab-renderer-debug'}
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      Abrir depuração ↗
+                    </a>
+                  </>}
+                  {copyStatus && <span role="status">{copyStatus}</span>}
+                  {contentUrl && (
+                    <a className="host-article-original-link" href={contentUrl} target="_blank" rel="noreferrer">
+                      Open the content URL ↗
+                    </a>
+                  )}
                 </div>
               </details>
               {!editing && compactControls && viewAddon?.ui && <AddonControlPanel addon={viewAddon} controller={controller} reading compact onToggleExpanded={() => setControlsExpanded(true)} />}
