@@ -25,11 +25,13 @@ function normalizeRoute(route: string): string {
 /** Predefined host routes. */
 export const ROUTES = {
   home: '/',
+  favorites: '/favorites',
   settings: '/settings',
 } as const;
 
 const ADDON_ROUTE_PREFIX = '/addons/';
 const SEARCH_RESULT_ROUTE_PREFIX = '/article/';
+const FAVORITE_RESULT_ROUTE_PREFIX = `${ROUTES.favorites}${SEARCH_RESULT_ROUTE_PREFIX}`;
 
 /**
  * Creates a stable add-on route from its canonical identity.
@@ -54,20 +56,26 @@ export function manifestUrlFromRoute(route: string): string | null {
 }
 
 /** Creates a dedicated result route without losing the add-on URL. */
-export function resultRoute(contentUrl: string): string {
-  return `${SEARCH_RESULT_ROUTE_PREFIX}${encodeURIComponent(contentUrl)}`;
+export function resultRoute(contentUrl: string, fromFavorites = false): string {
+  const prefix = fromFavorites ? FAVORITE_RESULT_ROUTE_PREFIX : SEARCH_RESULT_ROUTE_PREFIX;
+  return `${prefix}${encodeURIComponent(contentUrl)}`;
+}
+
+export function isFavoriteResultRoute(route: string): boolean {
+  return route.startsWith(FAVORITE_RESULT_ROUTE_PREFIX);
 }
 
 /** Identifies article routes, including incomplete ones so the UI can show an error. */
 export function isResultRoute(route: string): boolean {
-  return route.startsWith(SEARCH_RESULT_ROUTE_PREFIX);
+  return route.startsWith(SEARCH_RESULT_ROUTE_PREFIX) || isFavoriteResultRoute(route);
 }
 
 /** Extracts a valid HTTP URL from an article route. */
 export function resultUrlFromRoute(route: string): string | null {
   if (!isResultRoute(route)) return null;
 
-  const encodedContentUrl = route.slice(SEARCH_RESULT_ROUTE_PREFIX.length);
+  const prefix = isFavoriteResultRoute(route) ? FAVORITE_RESULT_ROUTE_PREFIX : SEARCH_RESULT_ROUTE_PREFIX;
+  const encodedContentUrl = route.slice(prefix.length);
   if (!encodedContentUrl || encodedContentUrl.includes('/')) return null;
 
   try {

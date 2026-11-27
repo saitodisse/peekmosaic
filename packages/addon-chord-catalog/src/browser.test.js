@@ -96,7 +96,9 @@ it('lists a song once under its principal and links both ways to its deduplicate
   vi.stubGlobal('location', { origin: 'http://localhost:5280' });
   await setup({ registerService: vi.fn() });
   const payload = async (path) => JSON.parse((await request({ url: new URL(path, import.meta.url).href })).body);
-  expect((await payload('./search/chart/song.json')).metas.map(({ id }) => id)).toEqual(['principal']);
+  expect((await payload('./search/chart/song.json')).metas).toMatchObject([
+    { id: 'principal', displayFields: expect.arrayContaining([{ id: 'versions', label: 'Versions', value: '2' }]) },
+  ]);
   const principalUrl = new URL('./text/chart/principal/content.txt', import.meta.url).href;
   const plainUrl = new URL('./text/chart/simple/content.txt', import.meta.url).href;
   expect((await payload('./text/chart/principal/content.json')).contentVersions).toEqual([

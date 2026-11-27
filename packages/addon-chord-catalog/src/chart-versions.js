@@ -41,17 +41,21 @@ export function preferVersion(candidate, current) {
   return candidate.updatedAt > current.updatedAt;
 }
 
-/** Keep one catalogue entry per song and retain a usable result for partial imports. */
+/** Keep one catalogue entry per song and count its distinct available versions. */
 export function principalCharts(items, identityOf) {
   const works = new Map();
   const identities = items.map(identityOf);
   for (const [index, identity] of identities.entries()) {
     if (!identity) continue;
     const current = works.get(identity.work);
-    if (!current || preferVersion(identity, current.identity)) works.set(identity.work, { index, identity });
+    const versions = current?.versions ?? new Set();
+    versions.add(identity.version);
+    if (!current || preferVersion(identity, current.identity)) works.set(identity.work, { index, identity, versions });
   }
-  return items.filter((_, index) => {
-    const identity = identities[index];
-    return !identity || works.get(identity.work).index === index;
+  const charts = [];
+  items.forEach((item, index) => {
+    const work = works.get(identities[index]?.work);
+    if (!work || work.index === index) charts.push({ ...item, versionCount: work?.versions.size ?? 1 });
   });
+  return charts;
 }

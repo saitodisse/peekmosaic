@@ -9,6 +9,7 @@ import type { AddonManifest, AddonModule, AddonStateStore, HostAPI, ServiceInter
 import { App } from './App';
 import * as search from './search';
 import { INSTALLATIONS_STORAGE_KEY } from './factory-reset';
+import * as favorites from './favorites-store';
 import { resultRoute } from './router';
 
 const chartUrl = 'http://localhost:5295/text/chart/static-and-rain/content.txt';
@@ -177,6 +178,7 @@ describe('App add-on bootstrap', () => {
       description: '', displayFields: [
         { id: 'artist', label: 'Artist', value: 'Skank' },
         { id: 'song', label: 'Song', value: name },
+        { id: 'versions', label: 'Versions', value: name === 'Água' ? '3' : '1' },
         { id: 'album', label: 'Album', value: 'Fixture' },
       ],
     });
@@ -189,6 +191,8 @@ describe('App add-on bootstrap', () => {
     }));
     await act(async () => { root.render(<NuqsAdapter><App /></NuqsAdapter>); });
     const titles = () => [...container.querySelectorAll('tbody tr td:nth-child(2)')].map((cell) => cell.textContent);
+    expect([...container.querySelectorAll('thead th')].map((header) => header.textContent)).toEqual(['Artist', 'Song', 'Versions']);
+    expect(container.querySelector('tbody tr:first-child td:nth-child(3)')?.textContent).toBe('3');
     expect(titles()).toEqual(['Água', 'Lua', 'Mar', 'Sol', 'Vento']);
     await act(async () => {
       container.querySelector<HTMLButtonElement>('button[aria-label="Show songs by Skank"]')!.click();
@@ -203,6 +207,28 @@ describe('App add-on bootstrap', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     });
     expect(titles()).toEqual(['Zulu']);
+  });
+
+  it('lists saved charts on a dedicated page and opens them with a link back to favorites', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
+    vi.spyOn(favorites, 'listFavorites').mockResolvedValue([
+      { url: chartUrl, title: 'Cinco Minutos', createdAt: 1 },
+    ]);
+    window.history.replaceState(null, '', '/?q=cinco#/favorites');
+    await act(async () => { root.render(<NuqsAdapter><App /></NuqsAdapter>); });
+
+    const listing = container.querySelector('main section[aria-labelledby="favorites-heading"]')!;
+    expect(listing.querySelector('h1')?.textContent).toBe('Favoritas');
+    expect(container.querySelector('[aria-label="Search results"]')).toBeNull();
+    const chart = listing.querySelector('a')!;
+    expect(chart.textContent).toBe('Cinco Minutos');
+    await act(async () => { chart.click(); await new Promise((resolve) => setTimeout(resolve, 20)); });
+
+    const back = container.querySelector<HTMLAnchorElement>('a.host-article-back')!;
+    expect(back.getAttribute('href')).toBe('#/favorites');
+    await act(async () => { back.click(); await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(container.querySelector('#favorites-heading')).not.toBeNull();
+    expect(window.location.search).toBe('?q=cinco');
   });
 
   it.each([

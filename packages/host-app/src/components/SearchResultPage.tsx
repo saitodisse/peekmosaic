@@ -10,7 +10,7 @@ import { FavoriteButton } from './FavoriteButton';
 import { RenderedHtmlView } from './RenderedHtmlView';
 import { renderedHtml } from '../tab-view';
 import { useAddonTab } from './useAddonTab';
-import { navigate, resultRoute, ROUTES } from '../router';
+import { href, navigate, resultRoute, ROUTES } from '../router';
 import {
   fetchSearchResultContent,
   fetchSearchResultDetails,
@@ -35,6 +35,7 @@ interface SearchResultPageProps {
   editRequested?: boolean;
   onEditChange?: (enabled: boolean) => void;
   onBackToResults?: () => void;
+  fromFavorites?: boolean;
   onArtistSearch?: (artist: string) => void;
   previousResultUrl?: string | null;
   nextResultUrl?: string | null;
@@ -112,7 +113,7 @@ function LoadingState({ title }: { title: string }) {
   );
 }
 
-export function SearchResultPage({ contentUrl, result, ready, viewProvider, viewAddon, editorProvider, editRequested = false, onEditChange, onBackToResults, onArtistSearch, previousResultUrl, nextResultUrl, fetchResource = fetch }: SearchResultPageProps) {
+export function SearchResultPage({ contentUrl, result, ready, viewProvider, viewAddon, editorProvider, editRequested = false, onEditChange, onBackToResults, fromFavorites = false, onArtistSearch, previousResultUrl, nextResultUrl, fetchResource = fetch }: SearchResultPageProps) {
   const [details, setDetails] = useState<SearchResultDetails | null>(null);
   const [originalText, setOriginalText] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -366,7 +367,7 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
     <nav className="host-article-versions" aria-label="Versões da música">
       {versions.map(({ label, url, current }) => current
         ? <span key={url} aria-current="page">{label}</span>
-        : <a key={url} href={`#${resultRoute(url)}`}>{label}</a>)}
+        : <a key={url} href={href(resultRoute(url, fromFavorites))}>{label}</a>)}
     </nav>
   );
   const contentText = textValue(data?.content?.text);
@@ -427,14 +428,14 @@ export function SearchResultPage({ contentUrl, result, ready, viewProvider, view
         </div>, readingStatusTarget,
       )}
       <a
-        href="#/"
+        href={href(fromFavorites ? ROUTES.favorites : ROUTES.home)}
         className="host-article-back"
         onClick={(event) => {
           if (!onBackToResults) return;
           event.preventDefault();
           onBackToResults();
         }}
-      >← Back to results</a>
+      >{fromFavorites ? '← Voltar para favoritas' : '← Back to results'}</a>
 
       {loading && <LoadingState title={result?.name ?? title} />}
 

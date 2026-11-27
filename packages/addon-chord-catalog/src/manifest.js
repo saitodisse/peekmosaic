@@ -206,7 +206,7 @@ const trafficEntrySchema = object('One HTTP exchange observed by the server.', '
 export const manifest = defineAddonManifest({
   entrypoint: './bundle.js',
   id: 'chord-catalog',
-  version: '1.4.0',
+  version: '1.5.0',
   name: 'Chord Chart Catalogue',
   description: 'Lists, searches and imports chord charts, including locally decrypted private archives.',
   author: 'AC Team',

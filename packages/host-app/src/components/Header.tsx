@@ -6,6 +6,7 @@ interface HeaderProps {
   searchValue: string;
   searchDisabled?: boolean;
   searching?: boolean;
+  favoritesActive?: boolean;
   searchLabel?: string;
   onSearchValueChange: (value: string) => void;
   onSearch: (value: string) => void;
@@ -18,6 +19,7 @@ export function Header({
   searchValue,
   searchDisabled = false,
   searching = false,
+  favoritesActive = false,
   searchLabel = "Search add-ons",
   onSearchValueChange,
   onSearch,
@@ -86,6 +88,9 @@ export function Header({
 
           <nav aria-label="Main navigation" className="host-header-nav">
             <Link to={ROUTES.home} className="host-header-link">Start</Link>
+            <Link to={ROUTES.favorites} className="host-header-link" aria-current={favoritesActive ? 'page' : undefined}>
+              <span aria-hidden="true">★</span> Favoritas
+            </Link>
             <Link to={ROUTES.settings} onNavigate={onSettingsNavigate} className="host-header-link host-header-settings-link">
               <span aria-hidden="true">⚙</span> Settings
             </Link>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { importSource, importArchive, sha256, sourceLines, updateSources } from './source-import.js';
+import { importSource, importArchive, importScraperFiles, sha256, sourceLines, updateSources } from './source-import.js';
 import { toContentJson } from './payloads-core.js';
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import { readFile } from 'node:fs/promises';
@@ -130,6 +130,41 @@ async function scraperZip({ prefix = 'downloads/artist/', changeText = false, mi
   return { bytes: zipSync(files), data };
 }
 const zipFetch = (bytes) => async () => new Response(bytes, { headers: { 'Content-Type': 'application/zip' } });
+
+it('imports the newest scraper pair per source URL while keeping other versions', async () => {
+  const { data } = await scraperZip();
+  const newer = 'G   D\r\n  Canção atualizada  \r\n';
+  const collectedAt = '2026-11-26T17:36:46Z';
+  const files = new Map([
+    ['artist/song.txt', strToU8(SCRAPER_TEXT)],
+    ['artist/song.source.json', strToU8(JSON.stringify(data))],
+    ['artist/song_principal.txt', strToU8(newer)],
+    ['artist/song_principal.source.json', strToU8(JSON.stringify({
+      ...data, collectedAt, file: { name: 'song_principal.txt', sha256: await sha256(newer), bytes: strToU8(newer).length },
+    }))],
+    ['artist/song_simplificada.txt', strToU8(SCRAPER_TEXT)],
+    ['artist/song_simplificada.source.json', strToU8(JSON.stringify({
+      ...data, sourceUrl: `${data.sourceUrl}simplificada.html`, file: { ...data.file, name: 'song_simplificada.txt' },
+      chart: { ...data.chart, version: { name: 'Simplificada' } },
+    }))],
+  ]);
+
+  for (const entries of [files, new Map([...files].reverse())]) {
+    const { snapshots, warnings } = await importScraperFiles(entries);
+    const charts = snapshots.flatMap((snapshot) => snapshot.charts);
+    expect(charts).toHaveLength(2);
+    expect(charts).toContainEqual(expect.objectContaining({ sourceUrl: data.sourceUrl, collectedAt, text: newer }));
+    expect(charts).toContainEqual(expect.objectContaining({ versionLabel: 'Simplificada' }));
+    expect(warnings).toEqual(['1 duplicate chart pair(s) ignored. The newest collection per source URL was kept.']);
+  }
+
+  const snapshot = await importArchive(ZIP_URL, zipSync(Object.fromEntries(files)));
+  expect(snapshot.charts).toHaveLength(2);
+  expect(snapshot.charts[0]).toMatchObject({ collectedAt, text: newer });
+
+  files.set('artist/song.txt', strToU8('corrupt'));
+  await expect(importScraperFiles(files)).rejects.toThrow('Integrity check failed');
+});
 
 describe('TAR with Zstandard imports', () => {
   it('imports an archive containing the root directory entry ./', async () => {

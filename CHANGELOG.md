@@ -4,6 +4,21 @@ This file describes, in reverse order, how the project evolved. The quick read s
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.22.0] - 2026-11-27
+
+### Added
+
+- Open saved charts from the Favoritas page and return to it from any version.
+- Show how many distinct versions each song has in the catalogue and search results.
+
+### Fixed
+
+- Keep the newest collection when several imported scraper pairs share a source URL and report how many duplicates were skipped.
+
+### Changed
+
+- Publish the catalogue, viewer, and editor as fixed add-on release 1.20.0.
+
 ## [1.21.0] - 2026-11-24
 
 ### Added

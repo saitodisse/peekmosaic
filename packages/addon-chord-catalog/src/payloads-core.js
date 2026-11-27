@@ -37,7 +37,7 @@ export function chartSummary(chart) {
 }
 
 /** Row shape shared by the `catalog` and `search` resources. */
-export function toMeta(chart, baseUrl) {
+export function toMeta(chart, baseUrl, versionCount = chart.versionCount ?? 1) {
   return {
     id: chart.id,
     type: CHART_TYPE,
@@ -47,6 +47,7 @@ export function toMeta(chart, baseUrl) {
     displayFields: [
       { id: 'artist', label: 'Artist', value: chart.artist?.name ?? 'Unknown artist', image: chart.artist?.image ? absolute(baseUrl, chart.artist.image) : undefined },
       { id: 'song', label: 'Song', value: chart.title, url: absolute(baseUrl, contentPath(chart, 'txt')) },
+      { id: 'versions', label: 'Versions', value: String(versionCount) },
       {
         id: 'album',
         label: 'Album · First released',

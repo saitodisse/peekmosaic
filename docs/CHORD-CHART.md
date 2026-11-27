@@ -422,6 +422,11 @@ area, or use **Choose a folder**. The importer walks subfolders and matches each
 `.txt` chart with the `.source.json` of the same name in the same folder. Keep
 both files together so the importer can validate the chart and identify its song.
 
+For scraper pairs in a folder or archive, the importer keeps one chart per
+source URL. When several valid pairs share a URL, it keeps the latest by
+`collectedAt` and reports how many duplicates it skipped. Versions with
+different source URLs are imported separately.
+
 The search lists the song under its principal version. The song page links to
 the other versions, including those already in the library. Importing a loose
 version again updates that version and preserves the others. The

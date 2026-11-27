@@ -36,11 +36,12 @@ export function SearchResultsTable({ query, artistFilter, browsing = false, resu
   const pendingFocusRef = useRef<{ page: number; edge: 'first' | 'last'; sawLoading: boolean } | null>(null);
   const firstRowOnPageChangeRef = useRef<{ page: number; results: SearchResultRow[] } | null>(null);
   const proposedFields = results[0]?.displayFields;
-  const displayFields = proposedFields?.length === 3 && results.every((result) => result.displayFields?.length === proposedFields.length
+  const displayFields = proposedFields && proposedFields.length >= 3 && results.every((result) => result.displayFields?.length === proposedFields.length
     && result.displayFields.every((field, index) => field.id === proposedFields[index]?.id && field.label === proposedFields[index]?.label))
     ? proposedFields.filter((field) => field.id !== 'album')
     : undefined;
   const hasVisualColumn = !displayFields && results.some((result) => result.emoji || result.image);
+  const hasVersionsColumn = !displayFields && results.some((result) => result.displayFields?.some((field) => field.id === 'versions'));
   const listsSomething = Boolean(query) || browsing;
   const emptyMessage = query
     ? providerCount === 0
@@ -248,7 +249,7 @@ export function SearchResultsTable({ query, artistFilter, browsing = false, resu
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', minWidth: 720, tableLayout: displayFields ? 'fixed' : 'auto', borderCollapse: 'collapse', color: '#cbd5e1', fontSize: 13 }}>
           {displayFields && <colgroup>
-            {displayFields.map((field, index) => <col key={field.id} style={index === 0 ? { width: 180 } : undefined} />)}
+            {displayFields.map((field, index) => <col key={field.id} style={field.id === 'versions' ? { width: 90 } : index === 0 ? { width: 180 } : undefined} />)}
           </colgroup>}
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.14)', color: '#94a3b8', textAlign: 'left' }}>
@@ -259,6 +260,7 @@ export function SearchResultsTable({ query, artistFilter, browsing = false, resu
                 <th scope="col" style={{ padding: '9px 10px' }}>Type</th>
                 <th scope="col" style={{ padding: '9px 10px' }}>ID</th>
                 <th scope="col" style={{ padding: '9px 10px' }}>Name</th>
+                {hasVersionsColumn && <th scope="col" style={{ padding: '9px 10px' }}>Versions</th>}
                 <th scope="col" className="host-search-results-description" style={{ padding: '9px 10px', width: '50%', maxWidth: '50vw' }}>Description</th>
               </>}
             </tr>
@@ -316,13 +318,14 @@ export function SearchResultsTable({ query, artistFilter, browsing = false, resu
                     </a>
                     <span style={{ display: 'block', marginTop: 3, color: '#64748b', fontSize: 11, fontWeight: 400 }}>{result.sourceAddonName}</span>
                   </td>
+                  {hasVersionsColumn && <td style={{ padding: '11px 10px' }}>{result.displayFields?.find((field) => field.id === 'versions')?.value ?? '—'}</td>}
                   <td className="host-search-results-description" style={{ padding: '11px 10px', width: '50%', maxWidth: '50vw', color: '#cbd5e1', lineHeight: 1.45 }}>{truncateDescription(result.description)}</td>
                 </>}
               </tr>
             ))}
             {results.length === 0 && (
               <tr>
-                <td colSpan={displayFields?.length ?? (hasVisualColumn ? 5 : 4)} style={{ padding: '28px 10px', color: '#64748b', textAlign: 'center' }}>
+                <td colSpan={displayFields?.length ?? 4} style={{ padding: '28px 10px', color: '#64748b', textAlign: 'center' }}>
                   {loading ? 'Querying active add-ons…' : emptyMessage}
                 </td>
               </tr>

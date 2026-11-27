@@ -190,7 +190,7 @@ export async function request({ url }) {
       cursor: parsed.searchParams.get('cursor') ?? undefined,
     });
     if (resource === 'search') {
-      body = JSON.stringify({ metas: items.map((entry) => toMeta(entry.chart, baseUrl)), pagination });
+      body = JSON.stringify({ metas: items.map((entry) => toMeta(entry.chart, baseUrl, entry.versionCount)), pagination });
     } else {
       body = JSON.stringify({ metas: items.map((chart) => toMeta(chart, baseUrl)), pagination });
     }

@@ -215,8 +215,7 @@ function originUrl(value, context) {
 async function importScraper(root, files) {
   const jsonDecoder = new TextDecoder('utf-8', { fatal: true });
   const textDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
-  const charts = [];
-  const identities = new Set();
+  const chartsByUrl = new Map();
   const paired = new Set();
   for (const [path, bytes] of files) {
     if (!path.endsWith('.source.json')) continue;
@@ -229,8 +228,6 @@ async function importScraper(root, files) {
     const checksum = await sha256(txt);
     if ((data.file?.sha256 && data.file.sha256.toLowerCase() !== checksum) || (data.file?.bytes !== undefined && data.file.bytes !== txt.length)) throw new Error(`Integrity check failed: ${txtPath}`);
     const sourceUrl = originUrl(data.sourceUrl, 'chart source URL');
-    if (identities.has(sourceUrl)) throw new Error(`Duplicate chart source URL: ${sourceUrl}`);
-    identities.add(sourceUrl);
     if (!data.artist || typeof data.artist !== 'object') throw new Error(`Missing artist metadata: ${path}`);
     requiredText(data.collectedAt, 'collection date');
     if (!Number.isFinite(Date.parse(data.collectedAt))) throw new Error(`Invalid collection date: ${path}`);
@@ -239,7 +236,7 @@ async function importScraper(root, files) {
     const instrument = { 'cifra-group': 'guitar', guitar: 'guitar', ukulele: 'ukulele', cavaco: 'cavaquinho', keyboard: 'keyboard', bass: 'bass' }[details.instrument?.slug];
     const genre = usedGenre(data.artist.genre);
     const statistics = usedStatistics(details.statistics);
-    charts.push({
+    const chart = {
       id: `source:${encodeURIComponent(root)}:scraper:${encodeURIComponent(sourceUrl)}`,
       title: requiredText(data.title, 'chart title'),
       artist: { name: requiredText(data.artist.name, 'artist name'), slug: requiredText(data.artist.slug, 'artist slug') },
@@ -255,12 +252,19 @@ async function importScraper(root, files) {
       versionLabel: details.version?.name ?? 'Imported version', instrumentId: instrument ?? details.instrument?.slug ?? 'unknown',
       tuningId: instrument === 'guitar' && details.tuning === 'E A D G B E' ? 'guitar-standard' : undefined,
       tuning: details.tuning,
-    });
+    };
+    const previous = chartsByUrl.get(sourceUrl);
+    if (!previous || Date.parse(chart.collectedAt) > Date.parse(previous.collectedAt)) {
+      chartsByUrl.set(sourceUrl, chart);
+    }
     paired.add(txtPath);
   }
+  const charts = [...chartsByUrl.values()];
   if (!charts.length) throw new Error('No scraper .txt + .source.json pairs found.');
   const unpaired = [...files.keys()].filter((path) => path.endsWith('.txt') && !paired.has(path));
   const warnings = unpaired.length ? [`${unpaired.length} TXT file(s) without .source.json were ignored.`] : [];
+  const duplicates = paired.size - charts.length;
+  if (duplicates) warnings.push(`${duplicates} duplicate chart pair(s) ignored. The newest collection per source URL was kept.`);
   return { root, sourceId: 'artist-portal-scraper', name: `Artist Portal Scraper (${new Set(charts.map((chart) => chart.artist.slug)).size} artists)`, importedAt: new Date().toISOString(), charts, warnings };
 }
 

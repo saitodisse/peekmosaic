@@ -1,6 +1,12 @@
 const DATABASE = 'addons:state:host:favorites:v1';
 const STORE = 'favorites';
 
+export interface FavoriteChart {
+  url: string;
+  title: string;
+  createdAt: number;
+}
+
 function openFavorites(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, 1);
@@ -29,6 +35,11 @@ async function accessFavorites<T>(
 
 export async function isFavorite(url: string): Promise<boolean> {
   return (await accessFavorites('readonly', (store) => store.getKey(url))) !== undefined;
+}
+
+export async function listFavorites(): Promise<FavoriteChart[]> {
+  const favorites = await accessFavorites<FavoriteChart[]>('readonly', (store) => store.getAll());
+  return favorites.sort((a, b) => b.createdAt - a.createdAt || a.title.localeCompare(b.title, 'pt-BR'));
 }
 
 export async function setFavorite(url: string, title: string, favorite: boolean): Promise<void> {

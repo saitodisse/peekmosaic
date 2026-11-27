@@ -15,11 +15,12 @@ import { SearchResultPage } from './components/SearchResultPage';
 import { CONTENT_VIEW_SERVICE, type ContentViewProvider } from './content-view';
 import { CONTENT_EDITOR_SERVICE, type ContentEditorProvider } from './content-editor';
 import { SearchResultsTable } from './components/SearchResultsTable';
+import { FavoritesPage } from './components/FavoritesPage';
 import { ArtistRecommendations } from './components/ArtistRecommendations';
 import { ARTIST_RECOMMENDATIONS_SERVICE, artistRankings, type ArtistRanking, type ArtistRecommendationsProvider } from './artist-recommendations';
 import { browsePage, clampSearchLimit, createFetchSearchClient, hasNextSearchPage, SEARCH_ORDER_SERVICE, searchPage } from './search';
 import type { SearchCollection, SearchLanguages, SearchLimitValue, SearchOrderProvider, SearchPageState, SearchPagination, SearchProviderError, SearchResultRow } from './search';
-import { isResultRoute, manifestUrlFromRoute, navigate, ROUTES, addonRoute, resultUrlFromRoute, useRoute } from './router';
+import { isFavoriteResultRoute, isResultRoute, manifestUrlFromRoute, navigate, ROUTES, addonRoute, resultUrlFromRoute, useRoute } from './router';
 import { INSTALLATIONS_STORAGE_KEY, resetFactoryStorage } from './factory-reset';
 import { headersToObject, logBrowserHttpExchange } from './http-observability';
 
@@ -200,15 +201,21 @@ export function App({ importAddonModule }: AppProps = {}) {
   }, [addons]);
   const route = useRoute();
   const isSearchResultRoute = isResultRoute(route);
+  const showingFavorites = route === ROUTES.favorites;
+  const fromFavorites = isFavoriteResultRoute(route);
 
   useEffect(() => {
     if (!isSearchResultRoute && edit) void setSearchUrl({ edit: null }, { history: 'replace' });
   }, [edit, isSearchResultRoute, setSearchUrl]);
 
   const returnToResults = useCallback(() => {
+    if (fromFavorites) {
+      navigate(ROUTES.favorites);
+      return;
+    }
     setResultToFocus(resultUrlFromRoute(route));
     navigate(ROUTES.home);
-  }, [route]);
+  }, [fromFavorites, route]);
 
   const clearResultToFocus = useCallback(() => setResultToFocus(null), []);
 
@@ -859,6 +866,7 @@ export function App({ importAddonModule }: AppProps = {}) {
         searchValue={searchInput}
         searchDisabled={!installationsReady || !searchStateReady}
         searching={!showingArtistRanking && searching}
+        favoritesActive={showingFavorites}
         searchLabel={showingArtistRanking ? 'Filtrar artistas no ranking' : undefined}
         onSearchValueChange={setSearchInput}
         onSearch={(value) => {
@@ -876,7 +884,7 @@ export function App({ importAddonModule }: AppProps = {}) {
         // A rendered result uses the whole window; prose keeps a readable width.
         style={{ maxWidth: isSearchResultRoute ? '100%' : 1200, margin: '0 auto', padding: '24px 24px 48px' }}
       >
-        {!isAddonRoute && !isSearchResultRoute && !showingArtistRanking && (
+        {!isAddonRoute && !isSearchResultRoute && !showingArtistRanking && !showingFavorites && (
           <SearchResultsTable
             query={searchQuery}
             artistFilter={searchUrlArtist}
@@ -935,7 +943,7 @@ export function App({ importAddonModule }: AppProps = {}) {
               loading={loading}
             />
           </section>
-        ) : isSearchResultRoute ? (
+        ) : showingFavorites ? <FavoritesPage /> : isSearchResultRoute ? (
           <SearchResultPage
             key={searchResultContentUrl ?? 'invalid-result'}
             fetchResource={fetchResource}
@@ -943,9 +951,10 @@ export function App({ importAddonModule }: AppProps = {}) {
             result={selectedSearchResult}
             ready={installationsReady && searchStateReady}
             onBackToResults={returnToResults}
+            fromFavorites={fromFavorites}
             onArtistSearch={(artist) => runSearch(artist, artist)}
-            previousResultUrl={selectedSearchResultIndex > 0 ? searchResults[selectedSearchResultIndex - 1]?.url : null}
-            nextResultUrl={selectedSearchResultIndex >= 0 ? searchResults[selectedSearchResultIndex + 1]?.url ?? null : null}
+            previousResultUrl={!fromFavorites && selectedSearchResultIndex > 0 ? searchResults[selectedSearchResultIndex - 1]?.url : null}
+            nextResultUrl={!fromFavorites && selectedSearchResultIndex >= 0 ? searchResults[selectedSearchResultIndex + 1]?.url ?? null : null}
             viewProvider={contentViewProvider}
             viewAddon={contentViewAddon}
             editorProvider={contentEditorProvider}
